@@ -1,0 +1,16 @@
+# Không đưa dependency và artifact host vào build context; image cài dependency riêng.
+node_modules
+dist
+coverage
+test
+*.tsbuildinfo
+
+# Bỏ credential và cấu hình riêng của máy; container nhận biến từ Compose.
+.env
+.env.*
+!.env.example
+
+# Bỏ metadata Git, log và tài liệu không cần cho build image.
+.git
+*.log
+README.md

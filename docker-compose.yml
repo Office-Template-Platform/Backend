@@ -1,0 +1,126 @@
+# 1. Project và thứ tự khởi động
+# Tên group, image, cổng, credential và địa chỉ bind được lấy từ api/.env.
+# Compose chờ PostgreSQL healthy, chạy migration một lần, rồi mới khởi động API.
+# Mặc định các cổng chỉ bind vào 127.0.0.1; `docker compose down` giữ volume dữ liệu.
+name: ${COMPOSE_PROJECT_NAME:?Set COMPOSE_PROJECT_NAME in api/.env}
+
+services:
+    postgres:
+        # 2. PostgreSQL local
+        # Lưu schema và dữ liệu; image, credential, bind address và port lấy từ api/.env.
+        # Health check chỉ thành công khi database nhận kết nối; migration chờ điều kiện này.
+        # Dữ liệu nằm trong volume riêng để tồn tại qua lần dừng hoặc tạo lại container.
+        container_name: ${POSTGRES_CONTAINER_NAME:?Set POSTGRES_CONTAINER_NAME in api/.env}
+        image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE in api/.env}
+        restart: unless-stopped
+        command: ['postgres', '-p', '${DB_PORT:?Set DB_PORT in api/.env}']
+        environment:
+            POSTGRES_DB: ${DB_NAME:?Set DB_NAME in api/.env}
+            POSTGRES_USER: ${DB_USER:?Set DB_USER in api/.env}
+            POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in api/.env}
+            DB_PORT: ${DB_PORT:?Set DB_PORT in api/.env}
+        ports:
+            - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${DB_HOST_PORT:?Set DB_HOST_PORT in api/.env}:${DB_PORT:?Set DB_PORT in api/.env}'
+        volumes:
+            - office-template-api-postgres-data:/var/lib/postgresql/data
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'pg_isready -p "$$DB_PORT" -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 12
+            start_period: 10s
+        networks:
+            - office-template-platform-network
+
+    migrate:
+        # 3. Migration runner
+        # Job một lần dùng image API để áp dụng các migration đã biên dịch lên PostgreSQL.
+        # Không publish port; chỉ chạy sau khi PostgreSQL healthy và thoát khi hoàn tất.
+        # API chỉ khởi động khi job kết thúc thành công, tránh phục vụ trên schema cũ.
+        container_name: ${MIGRATE_CONTAINER_NAME:?Set MIGRATE_CONTAINER_NAME in api/.env}
+        image: ${API_IMAGE:?Set API_IMAGE in api/.env}
+        init: true
+        restart: 'no'
+        environment:
+            NODE_ENV: ${API_NODE_ENV:?Set API_NODE_ENV in api/.env}
+            DB_HOST: ${DB_HOST_DOCKER:?Set DB_HOST_DOCKER in api/.env}
+            DB_PORT: ${DB_PORT:?Set DB_PORT in api/.env}
+            DB_USER: ${DB_USER:?Set DB_USER in api/.env}
+            DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in api/.env}
+            DB_NAME: ${DB_NAME:?Set DB_NAME in api/.env}
+            DB_SSL: ${DB_SSL:?Set DB_SSL in api/.env}
+            DB_LOGGING: ${DB_LOGGING:?Set DB_LOGGING in api/.env}
+        command:
+            [
+                'node',
+                './node_modules/typeorm/cli.js',
+                'migration:run',
+                '-d',
+                'dist/database/config/data-source.js',
+            ]
+        depends_on:
+            postgres:
+                condition: service_healthy
+        networks:
+            - office-template-platform-network
+
+    api:
+        # 4. NestJS HTTP API
+        # Tạo runtime image từ Dockerfile; host port lấy từ API_HOST_PORT, port ứng dụng từ PORT.
+        # Chỉ khởi động sau migration; health check xác nhận endpoint /api/health phản hồi.
+        # Kết nối PostgreSQL bằng host nội bộ và credential lấy từ api/.env.
+        container_name: ${API_CONTAINER_NAME:?Set API_CONTAINER_NAME in api/.env}
+        image: ${API_IMAGE:?Set API_IMAGE in api/.env}
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: runtime
+        init: true
+        restart: unless-stopped
+        environment:
+            NODE_ENV: ${API_NODE_ENV:?Set API_NODE_ENV in api/.env}
+            PORT: ${PORT:?Set PORT in api/.env}
+            WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN in api/.env}
+            DB_HOST: ${DB_HOST_DOCKER:?Set DB_HOST_DOCKER in api/.env}
+            DB_PORT: ${DB_PORT:?Set DB_PORT in api/.env}
+            DB_USER: ${DB_USER:?Set DB_USER in api/.env}
+            DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in api/.env}
+            DB_NAME: ${DB_NAME:?Set DB_NAME in api/.env}
+            DB_SSL: ${DB_SSL:?Set DB_SSL in api/.env}
+            DB_LOGGING: ${DB_LOGGING:?Set DB_LOGGING in api/.env}
+        ports:
+            - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${API_HOST_PORT:?Set API_HOST_PORT in api/.env}:${PORT:?Set PORT in api/.env}'
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+        healthcheck:
+            test:
+                [
+                    'CMD',
+                    'node',
+                    '-e',
+                    "fetch('http://127.0.0.1:${PORT:?Set PORT in api/.env}/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+                ]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+        stop_grace_period: 20s
+        networks:
+            - office-template-platform-network
+
+volumes:
+    office-template-api-postgres-data:
+        name: ${DB_VOLUME_NAME:?Set DB_VOLUME_NAME in api/.env}
+        # Volume external giúp project mới gắn lại đúng database local đang có.
+        external: true
+
+networks:
+    office-template-platform-network:
+        name: ${COMPOSE_NETWORK_NAME:?Set COMPOSE_NETWORK_NAME in api/.env}
+        # Network riêng để API và migration phân giải PostgreSQL bằng tên service.
+        driver: bridge

@@ -1,4 +1,4 @@
-![Office Template Platform — thư viện mẫu văn bản và trình chiếu](https://raw.githubusercontent.com/Office-Template-Platform/Frontend/main/src/assets/office-template-platform-banner.png)
+![Office Template Platform — thư viện mẫu văn bản và trình chiếu](https://raw.githubusercontent.com/Office-Template-Platform/Frontend/main/src/assets/images/office-template-platform-banner.png)
 
 <div align="center">
 
@@ -17,6 +17,7 @@ API cho hai thư viện mẫu văn bản và mẫu trình chiếu.
 
 - [Tổng quan](#tổng-quan)
 - [Chạy ứng dụng](#chạy-ứng-dụng)
+- [Chạy PostgreSQL và API bằng Docker](#chạy-postgresql-và-api-bằng-docker)
 - [API hiện có](#api-hiện-có)
 - [Cấu hình môi trường](#cấu-hình-môi-trường)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
@@ -28,10 +29,10 @@ API cho hai thư viện mẫu văn bản và mẫu trình chiếu.
 
 Office Template API cung cấp điểm truy cập HTTP cho thư viện mẫu văn bản và thư viện mẫu trình chiếu. Mỗi thư viện là một feature riêng, có controller, application service và kiểu dữ liệu metadata riêng.
 
-API hiện có health check và hai endpoint danh mục. Các endpoint danh mục trả về mảng rỗng cho đến khi repository và dữ liệu mẫu được triển khai. Mô hình TypeORM cho thư viện mẫu, file và tài liệu đã có entity; kết nối PostgreSQL và migration chưa được cấu hình.
+API hiện có health check và hai endpoint danh mục. Các endpoint danh mục trả về mảng rỗng cho đến khi repository và dữ liệu mẫu được triển khai. Entity, kết nối PostgreSQL và migration TypeORM đã được cấu hình; repository nghiệp vụ chưa được triển khai.
 
 > [!IMPORTANT]
-> API chạy cục bộ và đọc cấu hình từ `api/.env`. Source hiện không cấu hình telemetry hoặc kết nối dịch vụ bên ngoài. `npm ci` tải package từ npm; `npm run build` tạo `dist/`. Xóa `.env`, `node_modules` và `dist` để dọn môi trường phát triển.
+> API đọc cấu hình từ `api/.env`. `npm ci` tải package từ npm; `npm run build` tạo `dist/`. Docker Compose bind API và PostgreSQL vào loopback của máy, không mở các cổng này ra mạng LAN.
 
 ## Chạy ứng dụng
 
@@ -39,6 +40,7 @@ API hiện có health check và hai endpoint danh mục. Các endpoint danh mụ
 
 - Node.js `22.x`
 - npm
+- Docker Engine với Docker Compose v2
 
 ### Cài đặt và khởi chạy
 
@@ -50,8 +52,11 @@ if (-not (Test-Path .env)) {
     Copy-Item .env.example .env
 }
 
+docker compose up -d postgres
 npm run dev
 ```
+
+Nếu `.env` đã tồn tại, hãy bổ sung các biến Docker Compose và `DB_*` còn thiếu từ `.env.example`; giữ nguyên các giá trị cấu hình khác.
 
 API chạy tại `http://localhost:3001` theo cấu hình mặc định. Mở `http://localhost:3001/docs` để xem tài liệu Swagger UI.
 
@@ -61,6 +66,41 @@ API chạy tại `http://localhost:3001` theo cấu hình mặc định. Mở `h
 curl.exe http://localhost:3001/api/health
 curl.exe http://localhost:3001/api/document-templates
 curl.exe http://localhost:3001/api/presentation-templates
+```
+
+## Chạy PostgreSQL và API bằng Docker
+
+Từ thư mục `api`, tạo `.env` nếu chưa có rồi khởi động stack:
+
+```powershell
+if (-not (Test-Path .env)) {
+    Copy-Item .env.example .env
+}
+
+$databaseVolume = docker volume ls --format '{{.Name}}'
+if ($databaseVolume -notcontains 'office-template-api-postgres-data') {
+    docker volume create office-template-api-postgres-data
+}
+
+docker compose up --build -d
+docker compose ps
+```
+
+Compose khởi động PostgreSQL 17, đợi health check thành công, chạy các migration đã đóng gói trong image, rồi mới mở API. PostgreSQL lưu dữ liệu trong volume `office-template-api-postgres-data`; cổng host mặc định là `5432`. API mặc định chạy tại `http://localhost:3001` và Swagger tại `http://localhost:3001/docs`.
+
+```powershell
+docker compose logs -f api
+docker compose down
+```
+
+`docker compose down` giữ nguyên volume database. Chỉ xóa volume nếu chủ động muốn xóa toàn bộ dữ liệu phát triển; không dùng `down -v` khi cần giữ dữ liệu.
+
+Nếu máy đã dùng cổng `5432` hoặc `3001`, đổi `DB_HOST_PORT` hoặc `API_HOST_PORT` trong `.env` trước khi chạy. Khi chỉ cần PostgreSQL cho API chạy bằng Node trên host:
+
+```powershell
+docker compose up -d postgres
+npm run migration:run:dev
+npm run dev
 ```
 
 ## API hiện có
@@ -89,13 +129,24 @@ Ví dụ response của `GET /health`:
 
 Tạo `api/.env` từ `.env.example` trước khi chạy ứng dụng:
 
-| Biến         | Mặc định                | Mục đích                           |
-| ------------ | ----------------------- | ---------------------------------- |
-| `PORT`       | `3001`                  | Cổng HTTP API                      |
-| `NODE_ENV`   | `development`           | Môi trường chạy                    |
-| `WEB_ORIGIN` | `http://localhost:3000` | Origin frontend được phép qua CORS |
+| Biến            | Mặc định                    | Mục đích                                         |
+| --------------- | --------------------------- | ------------------------------------------------ |
+| `PORT`          | `3001`                      | Cổng HTTP API                                    |
+| `NODE_ENV`      | `development`               | Môi trường chạy                                  |
+| `WEB_ORIGIN`    | `http://localhost:3000`     | Origin frontend được phép qua CORS               |
+| `DB_HOST`       | `localhost`                 | Host PostgreSQL khi API chạy trên máy            |
+| `DB_PORT`       | `5432`                      | Cổng PostgreSQL                                  |
+| `DB_USER`       | `office_template`           | User PostgreSQL local                            |
+| `DB_PASSWORD`   | `office_template_local_dev` | Mật khẩu chỉ dùng cho môi trường local           |
+| `DB_NAME`       | `office_template`           | Database local                                   |
+| `DB_SSL`        | `false`                     | Bật SSL khi môi trường PostgreSQL yêu cầu        |
+| `DB_LOGGING`    | `false`                     | Ghi SQL query vào log khi cần debug              |
+| `DB_HOST_PORT`  | `5432`                      | Cổng máy host được Docker publish cho PostgreSQL |
+| `API_HOST_PORT` | `3001`                      | Cổng máy host được Docker publish cho API        |
 
 Không commit `.env`; file này dành cho cấu hình của môi trường phát triển.
+
+`synchronize` luôn tắt. Thay đổi cấu trúc database phải được ghi thành migration rồi mới áp dụng; không bật tự đồng bộ schema trong môi trường phát triển hoặc production.
 
 ## Cấu trúc thư mục
 
@@ -108,6 +159,9 @@ api/
 │   │       ├── create-api-app.ts
 │   │       └── main.ts
 │   ├── database/
+│   │   ├── config/
+│   │   │   ├── data-source.ts
+│   │   │   └── database.options.ts
 │   │   ├── entities/
 │   │   │   ├── office-template.entity.ts
 │   │   │   ├── office-template-version.entity.ts
@@ -115,6 +169,8 @@ api/
 │   │   │   ├── stored-file.entity.ts
 │   │   │   ├── template-category.entity.ts
 │   │   │   └── user-document.entity.ts
+│   │   ├── migrations/
+│   │   │   └── 1793376000000-create-office-template-schema.ts
 │   │   └── enums/office-template.enums.ts
 │   └── modules/
 │       ├── health/
@@ -134,13 +190,16 @@ api/
 │           └── presentation-template-library.module.ts
 ├── test/
 │   └── jest-e2e.json
+├── .dockerignore
+├── Dockerfile
+├── docker-compose.yml
 ├── .env.example
 ├── nest-cli.json
 ├── package.json
 └── tsconfig.json
 ```
 
-`bootstrap/api` cấu hình và khởi chạy HTTP app. Trong mỗi feature, controller thuộc `presentation`; service và contract thuộc `application`. Các entity mô tả persistence đã được thiết kế; kết nối database, repository, lưu file và luồng tạo bản sao chưa được triển khai.
+`bootstrap/api` cấu hình và khởi chạy HTTP app. Trong mỗi feature, controller thuộc `presentation`; service và contract thuộc `application`. `database/config/database.options.ts` cung cấp cấu hình PostgreSQL dùng chung cho Nest runtime và TypeORM CLI; `database/config/data-source.ts` là entry point của CLI. Migration đầu tiên tạo sáu bảng metadata cùng enum, index, check constraint và khóa ngoại.
 
 ## Mô hình dữ liệu
 
@@ -246,23 +305,35 @@ Mỗi khối là một bảng; field được viết theo dạng `tên_field: ki
 | NestJS bootstrap, CORS, validation và Swagger | Đã triển khai             |
 | Health check                                  | Đã triển khai             |
 | Endpoint danh mục cho hai loại mẫu            | Có route, chưa có dữ liệu |
-| Entity TypeORM cho mô hình dữ liệu            | Đã thiết kế               |
-| Repository và kết nối PostgreSQL              | Chưa triển khai           |
+| Entity TypeORM cho mô hình dữ liệu            | Đã triển khai             |
+| Kết nối PostgreSQL và migration               | Đã triển khai             |
+| Repository và đọc dữ liệu thư viện            | Chưa triển khai           |
 | Đọc, xem trước, tạo bản sao và tải DOCX/PPTX  | Chưa triển khai           |
 
-Các dependency database và queue còn trong `package.json` từ cấu hình trước; module hiện tại chưa kết nối PostgreSQL hoặc Redis.
+Redis vẫn chưa được kết nối; các endpoint danh mục chưa đọc dữ liệu cho đến khi repository được triển khai.
 
 ## Lệnh phát triển
 
 Chạy trong thư mục `api`:
 
-| Lệnh                 | Mục đích                                |
-| -------------------- | --------------------------------------- |
-| `npm run dev`        | Chạy NestJS ở chế độ watch              |
-| `npm run build`      | Build API và viết lại alias cho runtime |
-| `npm run start:prod` | Chạy ứng dụng đã build trong `dist/`    |
-| `npm run type-check` | Kiểm tra kiểu TypeScript                |
-| `npm run lint`       | Kiểm tra source bằng ESLint             |
+| Lệnh                           | Mục đích                                |
+| ------------------------------ | --------------------------------------- |
+| `npm run dev`                  | Chạy NestJS ở chế độ watch              |
+| `npm run build`                | Build API và viết lại alias cho runtime |
+| `npm run start:prod`           | Chạy ứng dụng đã build trong `dist/`    |
+| `npm run migration:show:dev`   | Xem migration đã áp dụng và còn chờ     |
+| `npm run migration:run:dev`    | Áp dụng migration lên PostgreSQL local  |
+| `npm run migration:revert:dev` | Hoàn tác migration mới nhất             |
+| `npm run type-check`           | Kiểm tra kiểu TypeScript                |
+| `npm run lint`                 | Kiểm tra source bằng ESLint             |
+
+Tạo migration mới sau khi sửa entity bằng lệnh:
+
+```powershell
+npm run migration:generate:dev -- src/database/migrations/DescribeSchemaChange
+```
+
+Review migration đã sinh trước khi chạy `npm run migration:run:dev`. Không sửa migration đã áp dụng; tạo migration tiếp theo để thay đổi schema.
 
 ## Tích hợp frontend
 
