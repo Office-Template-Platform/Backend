@@ -1,0 +1,121 @@
+# Tên dự án được dùng làm tiền tố cho container, network và volume do Compose tạo.
+name: mini-order-management
+
+services:
+    # API chỉ phục vụ HTTP; publisher/processor/scheduler chạy trong service worker riêng.
+    api:
+        # Tên cố định bỏ hậu tố -1; đổi lại service này không thể chạy nhiều replica.
+        container_name: mini-order-management-api
+        image: mini-order-management:local
+        build:
+            context: .
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        # Các giá trị kết nối dùng tên service làm hostname trong mạng Docker.
+        # Đây là thông tin phát triển cục bộ, cần thay bằng secrets khi triển khai thật.
+        environment:
+            NODE_ENV: production
+            PORT: 3001
+            API_URL: http://localhost:3001/api
+            DATABASE_URL: postgresql://mini_order:mini_order_dev@postgres:5432/mini_order_management
+            REDIS_URL: redis://redis:6379
+        ports:
+            # Chỉ mở API trên máy này, không nhận kết nối trực tiếp từ mạng bên ngoài.
+            - '127.0.0.1:3001:3001'
+        volumes:
+            # Cho seed script đọc CSV từ repo; chỉ mount dữ liệu mẫu và chỉ đọc, không đưa fixture vào image.
+            - ./src/database/seeds/products:/app/src/database/seeds/products:ro
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        stop_grace_period: 30s
+
+    # Worker chạy outbox publisher, BullMQ processor và scheduler; không mở cổng HTTP.
+    worker:
+        container_name: mini-order-management-worker
+        image: mini-order-management:local
+        command: ['node', 'dist/bootstrap/worker/main.js']
+        restart: unless-stopped
+        environment:
+            NODE_ENV: production
+            DATABASE_URL: postgresql://mini_order:mini_order_dev@postgres:5432/mini_order_management
+            REDIS_URL: redis://redis:6379
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        stop_grace_period: 30s
+
+    # Migration là tác vụ chạy một lần theo yêu cầu, không tự chạy mỗi lần bật API.
+    migrate:
+        image: mini-order-management:local
+        profiles:
+            # Chỉ bật service này khi gọi lệnh có --profile tools.
+            - tools
+        command:
+            - node
+            - ./node_modules/typeorm/cli.js
+            - migration:run
+            - -d
+            - dist/database/config/data-source.js
+        environment:
+            NODE_ENV: production
+            DATABASE_URL: postgresql://mini_order:mini_order_dev@postgres:5432/mini_order_management
+        depends_on:
+            # Chờ database sẵn sàng trước khi TypeORM cập nhật schema.
+            postgres:
+                condition: service_healthy
+
+    # PostgreSQL lưu dữ liệu ứng dụng; volume giúp dữ liệu còn lại khi container dừng/xóa.
+    postgres:
+        # Tên cố định bỏ hậu tố -1; đổi lại service này không thể chạy nhiều replica.
+        container_name: mini-order-management-postgres
+        image: postgres:16-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: mini_order_management
+            POSTGRES_USER: mini_order
+            # Mật khẩu mẫu cho môi trường local, không dùng mật khẩu này ở production.
+            POSTGRES_PASSWORD: mini_order_dev
+        ports:
+            # Giới hạn kết nối từ máy local; các container khác kết nối qua hostname postgres.
+            - '127.0.0.1:5432:5432'
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            # API/migration chỉ được chạy khi PostgreSQL đã nhận kết nối và database đã sẵn sàng.
+            test:
+                [
+                    'CMD-SHELL',
+                    'pg_isready -U mini_order -d mini_order_management',
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+
+    # Redis làm backend cho BullMQ; bật AOF để Redis lưu lại thay đổi queue vào volume.
+    redis:
+        # Tên cố định bỏ hậu tố -1; đổi lại service này không thể chạy nhiều replica.
+        container_name: mini-order-management-redis
+        image: redis:7-alpine
+        restart: unless-stopped
+        command: ['redis-server', '--appendonly', 'yes']
+        ports:
+            # Chỉ mở Redis cho máy local; API trong Docker dùng hostname redis thay vì localhost.
+            - '127.0.0.1:6379:6379'
+        volumes:
+            - redis_data:/data
+        healthcheck:
+            # PING kiểm tra Redis có phản hồi trước khi API bắt đầu dùng queue.
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 10
+
+volumes:
+    # Hai volume này giữ dữ liệu PostgreSQL và Redis qua các lần restart container.
+    postgres_data:
+    redis_data:
