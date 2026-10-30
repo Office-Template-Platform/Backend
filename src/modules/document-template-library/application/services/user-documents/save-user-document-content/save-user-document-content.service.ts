@@ -1,5 +1,10 @@
-// Use case thay nội dung tài liệu bằng object mới rồi chỉ xóa file cũ sau khi database commit.
-import { Inject, Injectable, Logger } from '@nestjs/common';
+// Use case thay nội dung Office bằng object mới rồi chỉ xóa file cũ sau khi database commit.
+import {
+    Inject,
+    Injectable,
+    Logger,
+    UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import {
@@ -19,6 +24,7 @@ import {
 import { UserDocumentNotFoundError } from '@/modules/document-template-library/application/errors/user-document-not-found.error';
 import { UserDocumentNotReadyError } from '@/modules/document-template-library/application/errors/user-document-not-ready.error';
 import { toUserDocumentSummary } from '@/modules/document-template-library/application/utils/to-user-document-summary';
+import { getOfficeDocumentFormat } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 
 @Injectable()
 // Điều phối ghi file, transaction thay reference và cleanup; file hiện tại còn dùng được tới khi commit.
@@ -106,6 +112,17 @@ export class SaveUserDocumentContentService {
             );
         }
 
+        // Giữ nguyên định dạng của bản sao để file tải lên không biến PPTX thành DOCX hoặc ngược lại.
+        const fileFormat = getOfficeDocumentFormat(current.outputFile.mimeType);
+        if (
+            !fileFormat ||
+            !uploadedFilename.toLowerCase().endsWith(`.${fileFormat.extension}`)
+        ) {
+            throw new UnsupportedMediaTypeException(
+                'File tải lên phải cùng định dạng với tài liệu đang sửa.',
+            );
+        }
+
         // Bước 2.1: bỏ thư mục client gửi, xử lý dấu phân cách Windows, loại CR/LF và giới hạn metadata 255 ký tự.
         const originalFilename = basename(uploadedFilename.replace(/\\/g, '/'))
             .replace(/[\r\n]/g, '')
@@ -114,8 +131,8 @@ export class SaveUserDocumentContentService {
         // Bước 2.2: dùng UUID làm object key; nếu storage lỗi thì database chưa bị thay đổi.
         const newFile = await this.fileStorage.saveEditedDocument(
             content,
-            `${randomUUID()}.docx`,
-            originalFilename || 'document.docx',
+            `${randomUUID()}.${fileFormat.extension}`,
+            originalFilename || `document.${fileFormat.extension}`,
         );
 
         try {

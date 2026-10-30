@@ -332,21 +332,23 @@ describe('HandleOnlyOfficeCallbackService', () => {
         ).toEqual([]);
     });
 
-    // Test 10: callback trả filetype khác DOCX bị từ chối trước khi tải nội dung.
-    it('should reject a non-DOCX callback file type', async () => {
-        // Bước 1 - Arrange: revision hợp lệ nhưng callback khai định dạng PPTX.
+    // Test 10: callback có định dạng khác tài liệu đang sửa bị từ chối trước khi tải.
+    it('should reject a callback file type that differs from the current document', async () => {
+        // Bước 1 - Arrange: revision DOCX hợp lệ nhưng callback khai định dạng PPTX.
         mockDocumentReader.findUserDocumentById.mockResolvedValue(
             readyDocument,
         );
 
-        // Bước 2 - Act và Bước 3 - Assert: giữ luồng này giới hạn ở DOCX.
+        // Bước 2 - Act và Bước 3 - Assert: không tải file khác định dạng đầu vào.
         await expect(
             target.execute(
                 documentId,
                 authorizationHeader,
                 createCallback({ filetype: 'pptx' }),
             ),
-        ).rejects.toThrow('ONLYOFFICE trả về định dạng khác DOCX.');
+        ).rejects.toThrow(
+            'ONLYOFFICE trả về định dạng khác với file đang sửa.',
+        );
         expect(mockOnlyOfficeDocs.downloadEditedDocument.mock.calls).toEqual(
             [],
         );
@@ -370,7 +372,7 @@ describe('HandleOnlyOfficeCallbackService', () => {
         ).toEqual([]);
     });
 
-    // Test 12: file thiếu ZIP header hoặc một OOXML part bắt buộc bị từ chối.
+    // Test 12: DOCX thiếu ZIP header hoặc một OOXML part bắt buộc bị từ chối.
     it.each([
         ['ZIP header', Buffer.from('[Content_Types].xml word/document.xml')],
         [
@@ -405,9 +407,7 @@ describe('HandleOnlyOfficeCallbackService', () => {
                     authorizationHeader,
                     createCallback(),
                 ),
-            ).rejects.toThrow(
-                'ONLYOFFICE trả về file không hợp lệ dưới dạng DOCX.',
-            );
+            ).rejects.toThrow('ONLYOFFICE trả về file Office không hợp lệ.');
             expect(
                 mockSaveDocumentContent.executeFromOnlyOfficeCallback.mock
                     .calls,
@@ -415,8 +415,8 @@ describe('HandleOnlyOfficeCallbackService', () => {
         },
     );
 
-    // Test 13: payload lớn hơn 25 MB bị từ chối trước bước lưu.
-    it('should reject an edited DOCX larger than 25 MB', async () => {
+    // Test 13: file Office lớn hơn 25 MB bị từ chối trước bước lưu.
+    it('should reject an edited Office file larger than 25 MB', async () => {
         // Bước 1 - Arrange: tải về file vượt ngưỡng cho phép đúng một byte.
         mockDocumentReader.findUserDocumentById.mockResolvedValue(
             readyDocument,
@@ -428,7 +428,7 @@ describe('HandleOnlyOfficeCallbackService', () => {
         // Bước 2 - Act và Bước 3 - Assert: trả Payload Too Large và không gọi use case lưu.
         await expect(
             target.execute(documentId, authorizationHeader, createCallback()),
-        ).rejects.toThrow('File DOCX sau chỉnh sửa vượt quá 25 MB.');
+        ).rejects.toThrow('File sau chỉnh sửa vượt quá 25 MB.');
         expect(
             mockSaveDocumentContent.executeFromOnlyOfficeCallback.mock.calls,
         ).toEqual([]);

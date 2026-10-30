@@ -9,6 +9,7 @@
 // | 6   | Mở file hợp lệ              | Stream nội dung trong namespace hỗ trợ | Tạo reference hợp lệ; gọi openReadStream   | Stream đọc đúng bytes file                     |
 // | 7   | Namespace/path không hợp lệ | Chặn đọc hoặc xóa file ngoài ranh giới | Gửi reference namespace/key không hỗ trợ   | Ném lỗi, không thao tác filesystem ngoài root  |
 // | 8   | File cần cleanup đã mất     | Làm cleanup idempotent                 | Gọi remove với file user không còn tồn tại | Hoàn tất không lỗi                             |
+// | 10  | Copy template PPTX hợp lệ   | Hỗ trợ riêng namespace presentation      | Copy PPTX sang key mới; đọc metadata        | Bytes/hash đúng, MIME và suffix vẫn PPTX       |
 
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -31,6 +32,17 @@ describe('LocalDocumentFileStorage', () => {
         objectKey: 'document-templates/Tờ bướm mời dự tiệc/file.docx',
         originalFilename: 'file.docx',
         mimeType: docxMimeType,
+        sizeBytes: '100',
+        sha256: null,
+    };
+    const presentationSourceFile: StoredFileReference = {
+        provider: 'local',
+        storageNamespace: 'presentation-template-assets',
+        objectKey:
+            'presentation-templates/Sách nhỏ quảng cáo màu vàng/file.pptx',
+        originalFilename: 'file.pptx',
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         sizeBytes: '100',
         sha256: null,
     };
@@ -263,5 +275,36 @@ describe('LocalDocumentFileStorage', () => {
                 ),
             ),
         ).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    // Test 10 copy PPTX chỉ từ namespace presentation và giữ MIME, bytes, SHA-256 của source.
+    it('should copy a valid presentation template into a separate PPTX file', async () => {
+        // Bước 1 - Arrange: source là PPTX asset đã có trong thư viện mẫu.
+        const destinationKey = 'presentations/new-copy.pptx';
+
+        // Bước 2 - Act: copy source sang vùng user-documents với key độc lập.
+        const result = await target.copyTemplateFile(
+            presentationSourceFile,
+            destinationKey,
+            'Bài thuyết trình riêng.pptx',
+        );
+
+        // Bước 3 - Assert: output là file PPTX riêng và checksum khớp bytes thực tế.
+        const sourceBytes = await readFile(
+            join(process.cwd(), 'assets', presentationSourceFile.objectKey),
+        );
+        const copiedBytes = await readFile(
+            join(temporaryStorageRoot, 'user-documents', destinationKey),
+        );
+        expect(result).toEqual({
+            provider: 'local',
+            storageNamespace: 'user-documents',
+            objectKey: destinationKey,
+            originalFilename: 'Bài thuyết trình riêng.pptx',
+            mimeType: presentationSourceFile.mimeType,
+            sizeBytes: String(sourceBytes.byteLength),
+            sha256: createHash('sha256').update(sourceBytes).digest('hex'),
+        });
+        expect(copiedBytes).toEqual(sourceBytes);
     });
 });

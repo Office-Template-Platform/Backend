@@ -1,4 +1,4 @@
-// HTTP endpoint nhận và kiểm tra DOCX đã chỉnh sửa trước khi lưu thành file đầu ra.
+// HTTP endpoint nhận và kiểm tra DOCX/PPTX đã chỉnh sửa trước khi lưu thành file đầu ra.
 import {
     BadRequestException,
     Controller,
@@ -20,19 +20,18 @@ import {
     ApiTags,
 } from '@nestjs/swagger';
 import { SaveUserDocumentContentService } from '@/modules/document-template-library/application/services/user-documents/save-user-document-content/save-user-document-content.service';
-import type { UploadedDocxFile } from '@/modules/document-template-library/presentation/types/uploaded-docx-file';
+import type { UploadedOfficeDocumentFile } from '@/modules/document-template-library/presentation/types/uploaded-office-document-file';
 import { CurrentAnonymousWorkspaceId } from '@/modules/document-template-library/presentation/decorators/current-anonymous-workspace-id.decorator';
 import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/presentation/guards/anonymous-workspace.guard';
+import { getOfficeDocumentFormatByExtension } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 
-const MAX_EDITED_DOCX_SIZE = 25 * 1024 * 1024;
-const DOCX_MIME_TYPE =
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const DOCX_ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+const MAX_EDITED_OFFICE_FILE_SIZE = 25 * 1024 * 1024;
+const OFFICE_ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
 @ApiTags('User documents')
 @Controller('user-documents')
 @UseGuards(AnonymousWorkspaceGuard)
-// Controller chỉ sở hữu endpoint upload DOCX, giới hạn request và giữ contract multipart.
+// Controller nhận DOCX/PPTX đã sửa, xác thực loại file và giữ contract multipart chung.
 export class SaveUserDocumentContentController {
     constructor(
         private readonly saveDocumentContent: SaveUserDocumentContentService,
@@ -40,11 +39,13 @@ export class SaveUserDocumentContentController {
 
     @Put(':documentId/content')
     @UseInterceptors(
-        FileInterceptor('file', { limits: { fileSize: MAX_EDITED_DOCX_SIZE } }),
+        FileInterceptor('file', {
+            limits: { fileSize: MAX_EDITED_OFFICE_FILE_SIZE },
+        }),
     )
     @ApiOperation({
         operationId: 'UserDocumentsController_saveContent',
-        summary: 'Lưu nội dung DOCX đã chỉnh sửa',
+        summary: 'Lưu nội dung DOCX hoặc PPTX đã chỉnh sửa',
     })
     @ApiConsumes('multipart/form-data')
     @ApiBody({
@@ -62,29 +63,39 @@ export class SaveUserDocumentContentController {
     // Thứ tự kiểm tra chặn request thiếu file và file quá cỡ trước khi đọc nội dung.
     async saveContent(
         @Param('documentId', ParseUUIDPipe) documentId: string,
-        @UploadedFile() file: UploadedDocxFile | undefined,
+        @UploadedFile() file: UploadedOfficeDocumentFile | undefined,
         @CurrentAnonymousWorkspaceId() workspaceId: string,
     ) {
         if (!file) {
-            throw new BadRequestException('Cần tải lên một file DOCX.');
-        }
-
-        if (file.size > MAX_EDITED_DOCX_SIZE) {
-            throw new PayloadTooLargeException(
-                'File DOCX không được vượt quá 25 MB.',
+            throw new BadRequestException(
+                'Cần tải lên một file DOCX hoặc PPTX.',
             );
         }
 
-        // MIME và extension do client khai báo, vì vậy phải xác thực thêm signature và part OOXML.
+        if (file.size > MAX_EDITED_OFFICE_FILE_SIZE) {
+            throw new PayloadTooLargeException(
+                'File Office không được vượt quá 25 MB.',
+            );
+        }
+
+        // MIME và extension có thể bị giả mạo, nên đối chiếu chúng với ZIP signature và part OOXML.
+        const extension = file.originalname.toLowerCase().split('.').pop();
+        const format = extension
+            ? getOfficeDocumentFormatByExtension(extension)
+            : null;
+        const requiredPackagePart =
+            format?.extension === 'pptx'
+                ? 'ppt/presentation.xml'
+                : 'word/document.xml';
         if (
-            file.mimetype !== DOCX_MIME_TYPE ||
-            !file.originalname.toLowerCase().endsWith('.docx') ||
-            !file.buffer.subarray(0, 4).equals(DOCX_ZIP_HEADER) ||
+            !format ||
+            file.mimetype !== format.mimeType ||
+            !file.buffer.subarray(0, 4).equals(OFFICE_ZIP_HEADER) ||
             !file.buffer.includes(Buffer.from('[Content_Types].xml')) ||
-            !file.buffer.includes(Buffer.from('word/document.xml'))
+            !file.buffer.includes(Buffer.from(requiredPackagePart))
         ) {
             throw new UnsupportedMediaTypeException(
-                'File tải lên phải là tài liệu DOCX hợp lệ.',
+                'File tải lên phải là DOCX hoặc PPTX hợp lệ và cùng định dạng với bản đã tạo.',
             );
         }
 

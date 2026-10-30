@@ -1,4 +1,4 @@
-// HTTP boundary cho editor DOCX; callback phải trả body thuần theo contract ONLYOFFICE.
+// HTTP boundary cho editor DOCX/PPTX; callback phải trả body thuần theo contract ONLYOFFICE.
 import {
     Controller,
     Get,
@@ -23,6 +23,7 @@ import {
     ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { OFFICE_DOCUMENT_FORMATS } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 import {
     DOCUMENT_FILE_STORAGE,
     type DocumentFileStorageContract,
@@ -52,7 +53,8 @@ export class OnlyOfficeDocumentController {
     @UseGuards(AnonymousWorkspaceGuard)
     @ApiOperation({
         operationId: 'UserDocumentsController_editorConfig',
-        summary: 'Tạo cấu hình ONLYOFFICE để sửa DOCX trong trình duyệt',
+        summary:
+            'Tạo cấu hình ONLYOFFICE để sửa DOCX hoặc PPTX trong trình duyệt',
     })
     @ApiOkResponse({
         description: 'URL API script và cấu hình editor đã ký ở backend.',
@@ -68,10 +70,11 @@ export class OnlyOfficeDocumentController {
     @Get(':documentId/editor-file')
     @ApiOperation({
         operationId: 'UserDocumentsController_editorFile',
-        summary: 'Cấp file DOCX cho Document Server',
+        summary: 'Cấp file DOCX hoặc PPTX cho Document Server',
     })
     @ApiProduces(
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        OFFICE_DOCUMENT_FORMATS.docx.mimeType,
+        OFFICE_DOCUMENT_FORMATS.pptx.mimeType,
     )
     // URL có chữ ký và revision; stream nội tuyến để Document Server không tải nhầm mẫu gốc.
     async getEditorDocument(
@@ -84,10 +87,14 @@ export class OnlyOfficeDocumentController {
         );
         const stream = await this.fileStorage.openReadStream(file);
         const encodedFilename = encodeURIComponent(filename);
+        const fallbackExtension =
+            file.mimeType === OFFICE_DOCUMENT_FORMATS.pptx.mimeType
+                ? 'pptx'
+                : 'docx';
 
         return new StreamableFile(stream, {
             type: file.mimeType,
-            disposition: `inline; filename="document.docx"; filename*=UTF-8''${encodedFilename}`,
+            disposition: `inline; filename="document.${fallbackExtension}"; filename*=UTF-8''${encodedFilename}`,
         });
     }
 
@@ -104,7 +111,7 @@ export class OnlyOfficeDocumentController {
                 key: { type: 'string' },
                 status: { type: 'integer', example: 2 },
                 url: { type: 'string', format: 'uri' },
-                filetype: { type: 'string', example: 'docx' },
+                filetype: { type: 'string', enum: ['docx', 'pptx'] },
             },
         },
     })

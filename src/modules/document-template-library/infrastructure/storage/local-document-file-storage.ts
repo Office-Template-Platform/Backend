@@ -21,11 +21,15 @@ import type {
     DocumentFileStorageContract,
     StoredFileReference,
 } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+import {
+    getOfficeDocumentFormat,
+    getOfficeDocumentFormatByExtension,
+    OFFICE_DOCUMENT_FORMATS,
+} from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 
 const TEMPLATE_ASSET_NAMESPACE = 'document-template-assets';
+const PRESENTATION_ASSET_NAMESPACE = 'presentation-template-assets';
 const USER_DOCUMENT_NAMESPACE = 'user-documents';
-const DOCX_MIME_TYPE =
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 @Injectable()
 // Adapter giới hạn file vào asset đóng gói và namespace tài liệu người dùng.
@@ -36,14 +40,21 @@ export class LocalDocumentFileStorage implements DocumentFileStorageContract {
         destinationKey: string,
         originalFilename: string,
     ): Promise<StoredFileReference> {
+        const format = getOfficeDocumentFormat(source.mimeType);
+        const sourceNamespaceMatches =
+            (source.storageNamespace === TEMPLATE_ASSET_NAMESPACE &&
+                source.mimeType === OFFICE_DOCUMENT_FORMATS.docx.mimeType) ||
+            (source.storageNamespace === PRESENTATION_ASSET_NAMESPACE &&
+                source.mimeType === OFFICE_DOCUMENT_FORMATS.pptx.mimeType);
+
         if (
             source.provider !== 'local' ||
-            source.storageNamespace !== TEMPLATE_ASSET_NAMESPACE ||
-            source.mimeType !== DOCX_MIME_TYPE ||
-            !destinationKey.endsWith('.docx')
+            !sourceNamespaceMatches ||
+            !format ||
+            !destinationKey.endsWith(`.${format.extension}`)
         ) {
             throw new InternalServerErrorException(
-                'Nguồn mẫu không phải file DOCX local hợp lệ.',
+                'Nguồn mẫu không phải file Office local hợp lệ.',
             );
         }
 
@@ -69,7 +80,7 @@ export class LocalDocumentFileStorage implements DocumentFileStorageContract {
                 storageNamespace: USER_DOCUMENT_NAMESPACE,
                 objectKey: destinationKey,
                 originalFilename,
-                mimeType: DOCX_MIME_TYPE,
+                mimeType: format.mimeType,
                 sizeBytes: String(fileStats.size),
                 sha256: await this.hashFile(destinationPath),
             };
@@ -80,7 +91,7 @@ export class LocalDocumentFileStorage implements DocumentFileStorageContract {
             }
             if (this.isNodeError(error, 'ENOENT')) {
                 throw new InternalServerErrorException(
-                    'Không tìm thấy file DOCX nguồn của mẫu.',
+                    'Không tìm thấy file Office nguồn của mẫu.',
                 );
             }
             throw error;
@@ -93,9 +104,11 @@ export class LocalDocumentFileStorage implements DocumentFileStorageContract {
         destinationKey: string,
         originalFilename: string,
     ): Promise<StoredFileReference> {
-        if (!destinationKey.endsWith('.docx')) {
+        const extension = destinationKey.split('.').pop()?.toLowerCase() ?? '';
+        const format = getOfficeDocumentFormatByExtension(extension);
+        if (!format) {
             throw new InternalServerErrorException(
-                'Tên file tài liệu đầu ra không hợp lệ.',
+                'Tên file Office đầu ra không hợp lệ.',
             );
         }
 
@@ -112,7 +125,7 @@ export class LocalDocumentFileStorage implements DocumentFileStorageContract {
                 storageNamespace: USER_DOCUMENT_NAMESPACE,
                 objectKey: destinationKey,
                 originalFilename,
-                mimeType: DOCX_MIME_TYPE,
+                mimeType: format.mimeType,
                 sizeBytes: String(content.byteLength),
                 sha256: createHash('sha256').update(content).digest('hex'),
             };
@@ -194,7 +207,10 @@ export class LocalDocumentFileStorage implements DocumentFileStorageContract {
             );
         }
 
-        if (file.storageNamespace === TEMPLATE_ASSET_NAMESPACE) {
+        if (
+            file.storageNamespace === TEMPLATE_ASSET_NAMESPACE ||
+            file.storageNamespace === PRESENTATION_ASSET_NAMESPACE
+        ) {
             return this.resolveAssetPath(file.objectKey);
         }
         if (file.storageNamespace === USER_DOCUMENT_NAMESPACE) {

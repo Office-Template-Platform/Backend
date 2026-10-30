@@ -14,8 +14,9 @@ import type {
     OnlyOfficeEditorConfigResponse,
     OnlyOfficeFileAccessClaims,
 } from '@/integrations/onlyoffice/types/onlyoffice-docs.types';
+import type { OfficeDocumentExtension } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 
-const MAX_DOCX_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_EDITED_OFFICE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 
 @Injectable()
 // Adapter ứng dụng cho ONLYOFFICE Docs; giữ secret, URL mạng và định dạng JWT ở backend.
@@ -23,13 +24,14 @@ export class OnlyOfficeDocsService {
     constructor(private readonly jwtService: JwtService) {}
 
     // Bước 1 đọc cấu hình; thiếu URL hoặc JWT secret thì dừng trước khi phát hành token.
-    // Bước 2 ký URL tải DOCX riêng theo documentId và revision key, sau đó ghép vào editor config.
+    // Bước 2 ký URL tải file Office theo documentId và revision key, sau đó ghép vào editor config.
     // Bước 3 ký toàn bộ config với thời hạn ngắn hơn; trình duyệt chỉ nhận public script URL và config đã ký.
     // File URL và callback URL dùng API internal URL để Document Server trong Docker gọi được backend.
     async createEditorConfig(
         documentId: string,
         title: string,
         key: string,
+        fileType: OfficeDocumentExtension = 'docx',
     ): Promise<OnlyOfficeEditorConfigResponse> {
         // Bước 1: chuẩn hóa và kiểm tra các URL/secret cần cho cả token lẫn callback.
         const settings = this.getSettings();
@@ -55,16 +57,16 @@ export class OnlyOfficeDocsService {
         );
         documentUrl.searchParams.set('token', fileToken);
 
-        // Bước 4: chỉ cấp quyền chỉnh sửa/tải/in cho DOCX đã được API chọn; callback quay về backend nội bộ.
+        // Bước 4: chọn editor Word/Slide đúng file type; callback quay về backend nội bộ.
         const unsignedConfig: Omit<OnlyOfficeDocumentEditorConfig, 'token'> = {
-            documentType: 'word',
+            documentType: fileType === 'pptx' ? 'slide' : 'word',
             type: 'desktop',
             width: '100%',
             height: '100%',
             document: {
-                fileType: 'docx',
+                fileType,
                 key,
-                title: `${title}.docx`,
+                title: `${title}.${fileType}`,
                 url: documentUrl.toString(),
                 permissions: {
                     edit: true,
@@ -195,7 +197,7 @@ export class OnlyOfficeDocsService {
     // Bước 1 parse URL và kiểm tra protocol, origin allowlist, userinfo trước khi tạo request mạng.
     // Bước 2 gọi trực tiếp không theo redirect và có timeout để URL chuyển hướng không vượt allowlist.
     // Bước 3 chặn file quá lớn bằng Content-Length nếu có, đồng thời kiểm tra lại từng chunk khi stream.
-    // Lỗi upstream được chuẩn hóa thành 502; lỗi vượt giới hạn vẫn giữ 413 và reader luôn được giải phóng.
+    // Lỗi upstream được chuẩn hóa thành 502; file Office vượt giới hạn vẫn giữ 413.
     async downloadEditedDocument(fileUrl: string): Promise<Buffer> {
         const settings = this.getSettings();
         let target: URL;
@@ -242,7 +244,7 @@ export class OnlyOfficeDocsService {
         // Chỉ đọc response thành công có body; response lỗi không được chuyển tiếp nội dung upstream cho client.
         if (!response.ok || !response.body) {
             throw new BadGatewayException(
-                'ONLYOFFICE không cung cấp được file DOCX đã lưu.',
+                'ONLYOFFICE không cung cấp được file đã lưu.',
             );
         }
 
@@ -250,10 +252,10 @@ export class OnlyOfficeDocsService {
         const declaredSize = Number(response.headers.get('content-length'));
         if (
             Number.isFinite(declaredSize) &&
-            declaredSize > MAX_DOCX_SIZE_BYTES
+            declaredSize > MAX_EDITED_OFFICE_FILE_SIZE_BYTES
         ) {
             throw new PayloadTooLargeException(
-                'File DOCX sau chỉnh sửa vượt quá 25 MB.',
+                'File sau chỉnh sửa vượt quá 25 MB.',
             );
         }
 
@@ -269,10 +271,10 @@ export class OnlyOfficeDocsService {
 
                 totalSize += value.byteLength;
                 // Hủy stream ngay khi vượt ngưỡng để không tiếp tục tải hoặc giữ thêm dữ liệu trong bộ nhớ.
-                if (totalSize > MAX_DOCX_SIZE_BYTES) {
+                if (totalSize > MAX_EDITED_OFFICE_FILE_SIZE_BYTES) {
                     await reader.cancel();
                     throw new PayloadTooLargeException(
-                        'File DOCX sau chỉnh sửa vượt quá 25 MB.',
+                        'File sau chỉnh sửa vượt quá 25 MB.',
                     );
                 }
 
@@ -282,14 +284,14 @@ export class OnlyOfficeDocsService {
             // Giữ lỗi 413 đã chủ động tạo; lỗi đọc stream khác được chuyển thành lỗi upstream tổng quát.
             if (error instanceof PayloadTooLargeException) throw error;
             throw new BadGatewayException(
-                'Không đọc được nội dung DOCX từ ONLYOFFICE.',
+                'Không đọc được nội dung file từ ONLYOFFICE.',
             );
         } finally {
             // Nhả lock trong cả trường hợp đọc xong, vượt dung lượng hoặc stream bị lỗi.
             reader.releaseLock();
         }
 
-        // Ghép đúng tổng byte đã đếm; caller nhận DOCX hoàn chỉnh để lưu như một revision mới.
+        // Ghép đúng tổng byte đã đếm; caller nhận file Office hoàn chỉnh để lưu như một revision mới.
         return Buffer.concat(chunks, totalSize);
     }
 

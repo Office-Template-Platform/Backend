@@ -8,6 +8,7 @@
 // | 5   | Writer replace lỗi            | Dọn file mới chưa được tham chiếu     | Storage ghi file; writer replace reject                | Xóa file mới rồi truyền lỗi writer lên    |
 // | 6   | Dọn file cũ lỗi               | Giữ bản mới đã commit                 | Replace thành công; xóa file cũ reject                 | Trả summary mới, không rollback bản mới   |
 // | 7   | Dọn file mới cũng lỗi         | Giữ lỗi thay file ban đầu             | Replace reject; cleanup file mới cũng reject           | Lỗi replace gốc không bị che              |
+// | 9   | Bản PPTX                       | Lưu file đã sửa cùng định dạng PPTX    | Reader trả READY/PPTX; gọi save                         | Thay output PPTX và dọn file cũ sau commit          |
 
 import { Logger } from '@nestjs/common';
 import type {
@@ -301,5 +302,58 @@ describe('SaveUserDocumentContentService', () => {
                 'Resume.docx',
             ),
         ).rejects.toBe(failure);
+    });
+
+    // Test 9 giữ định dạng PPTX khi thay file; file cũ chỉ được dọn sau khi writer commit.
+    it('should replace a ready PPTX with another PPTX', async () => {
+        // Bước 1 - Arrange: reader, storage và writer cùng trả metadata đúng định dạng PPTX.
+        const pptxMimeType =
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        const previousPptxFile = {
+            ...currentDocument.outputFile!,
+            objectKey: 'presentations/deck.pptx',
+            originalFilename: 'deck.pptx',
+            mimeType: pptxMimeType,
+        };
+        const updatedPptxFile = {
+            ...newFile,
+            objectKey: 'presentations/deck-updated.pptx',
+            originalFilename: 'deck.pptx',
+            mimeType: pptxMimeType,
+        };
+        const updatedPptxDocument = {
+            ...currentDocument,
+            updatedAt: '2026-01-03T00:00:00.000Z',
+            outputFile: updatedPptxFile,
+        };
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue({
+            ...currentDocument,
+            outputFile: previousPptxFile,
+        });
+        mockFileStorage.saveEditedDocument.mockResolvedValue(updatedPptxFile);
+        mockDocumentWriter.replaceDocumentFile.mockResolvedValue({
+            document: updatedPptxDocument,
+            previousFile: previousPptxFile,
+        });
+
+        // Bước 2 - Act: cập nhật bản trình chiếu bằng file cùng định dạng.
+        const result = await target.executeForWorkspace(
+            'document-1',
+            'workspace-1',
+            content,
+            'deck.pptx',
+        );
+
+        // Bước 3 - Assert: lưu key PPTX mới, thay reference và dọn file cũ sau commit.
+        expect(result.updatedAt).toBe('2026-01-03T00:00:00.000Z');
+        expect(mockFileStorage.saveEditedDocument.mock.calls).toEqual([
+            [content, expect.stringMatching(/\.pptx$/), 'deck.pptx'],
+        ]);
+        expect(mockDocumentWriter.replaceDocumentFile.mock.calls).toEqual([
+            ['document-1', updatedPptxFile, undefined],
+        ]);
+        expect(mockFileStorage.removeUserDocument.mock.calls).toEqual([
+            [previousPptxFile],
+        ]);
     });
 });

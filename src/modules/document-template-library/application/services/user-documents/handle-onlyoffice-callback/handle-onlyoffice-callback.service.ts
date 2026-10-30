@@ -1,4 +1,4 @@
-// Xử lý callback đã ký và lưu DOCX cuối về file output riêng của người dùng.
+// Xử lý callback đã ký và lưu file DOCX/PPTX cuối về bản riêng của người dùng.
 import { createHash } from 'node:crypto';
 import {
     BadRequestException,
@@ -18,9 +18,10 @@ import { UserDocumentNotFoundError } from '@/modules/document-template-library/a
 import { UserDocumentNotReadyError } from '@/modules/document-template-library/application/errors/user-document-not-ready.error';
 import { UserDocumentRevisionConflictError } from '@/modules/document-template-library/application/errors/user-document-revision-conflict.error';
 import { SaveUserDocumentContentService } from '@/modules/document-template-library/application/services/user-documents/save-user-document-content/save-user-document-content.service';
+import { getOfficeDocumentFormat } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 
-const MAX_EDITED_DOCX_SIZE = 25 * 1024 * 1024;
-const DOCX_ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+const MAX_EDITED_OFFICE_FILE_SIZE = 25 * 1024 * 1024;
+const OFFICE_ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
 @Injectable()
 // Chỉ lưu status 2; ACK trạng thái không đổi nội dung, còn callback lỗi hoặc sai contract bị từ chối.
@@ -39,7 +40,7 @@ export class HandleOnlyOfficeCallbackService {
 
     // Xác minh JWT và contract callback trước khi đọc database hoặc tải file.
     // Chỉ status 2 của tài liệu READY và đúng editor key mới được tiếp tục lưu.
-    // File phải đúng origin, dưới giới hạn dung lượng và có cấu trúc DOCX hợp lệ.
+    // File phải đúng origin, dưới giới hạn dung lượng và có cấu trúc Office khớp định dạng nguồn.
     // Ghi theo revision hiện tại; callback cũ được ACK, còn lỗi khác được trả về.
     async execute(
         documentId: string,
@@ -105,10 +106,21 @@ export class HandleOnlyOfficeCallbackService {
             return;
         }
 
-        // Bước 6: nếu có filetype thì chỉ nhận DOCX; trường vắng mặt được phép theo contract.
-        if (payload.filetype && payload.filetype.toLowerCase() !== 'docx') {
+        // Bước 6: định dạng callback phải khớp file đang sửa; trường vắng mặt vẫn được phép theo contract.
+        const fileFormat = getOfficeDocumentFormat(
+            document.outputFile.mimeType,
+        );
+        if (!fileFormat) {
             throw new UnsupportedMediaTypeException(
-                'ONLYOFFICE trả về định dạng khác DOCX.',
+                'File đang sửa không thuộc định dạng DOCX/PPTX được hỗ trợ.',
+            );
+        }
+        if (
+            payload.filetype &&
+            payload.filetype.toLowerCase() !== fileFormat.extension
+        ) {
+            throw new UnsupportedMediaTypeException(
+                'ONLYOFFICE trả về định dạng khác với file đang sửa.',
             );
         }
 
@@ -116,15 +128,15 @@ export class HandleOnlyOfficeCallbackService {
         const content = await this.onlyOfficeDocs.downloadEditedDocument(
             payload.url,
         );
-        // Kiểm tra chữ ký ZIP và các part OOXML cần thiết trước khi ghi object mới vào storage.
-        this.assertValidDocx(content);
+        // Kiểm tra chữ ký ZIP và part OOXML trước khi ghi object mới vào storage.
+        this.assertValidOfficeDocument(content, fileFormat.extension);
 
         try {
             // Bước 8: truyền file reference hiện tại để writer khóa row và chặn callback ghi đè đồng thời.
             await this.saveDocumentContent.executeFromOnlyOfficeCallback(
                 documentId,
                 content,
-                `${document.title}.docx`,
+                `${document.title}.${fileFormat.extension}`,
                 {
                     storageNamespace: document.outputFile.storageNamespace,
                     objectKey: document.outputFile.objectKey,
@@ -144,22 +156,26 @@ export class HandleOnlyOfficeCallbackService {
         }
     }
 
-    // Bước 1 chặn file trên 25 MiB trước khi kiểm tra nội dung để giới hạn bộ nhớ.
-    // Bước 2 yêu cầu ZIP header và hai part OOXML cốt lõi; file thiếu thành phần sẽ bị từ chối.
-    private assertValidDocx(content: Buffer): void {
-        if (content.byteLength > MAX_EDITED_DOCX_SIZE) {
+    // Chặn file quá lớn và xác nhận package có các thành phần cốt lõi của đúng định dạng.
+    private assertValidOfficeDocument(
+        content: Buffer,
+        extension: 'docx' | 'pptx',
+    ): void {
+        if (content.byteLength > MAX_EDITED_OFFICE_FILE_SIZE) {
             throw new PayloadTooLargeException(
-                'File DOCX sau chỉnh sửa vượt quá 25 MB.',
+                'File sau chỉnh sửa vượt quá 25 MB.',
             );
         }
 
+        const requiredPackagePart =
+            extension === 'pptx' ? 'ppt/presentation.xml' : 'word/document.xml';
         if (
-            !content.subarray(0, 4).equals(DOCX_ZIP_HEADER) ||
+            !content.subarray(0, 4).equals(OFFICE_ZIP_HEADER) ||
             !content.includes(Buffer.from('[Content_Types].xml')) ||
-            !content.includes(Buffer.from('word/document.xml'))
+            !content.includes(Buffer.from(requiredPackagePart))
         ) {
             throw new UnsupportedMediaTypeException(
-                'ONLYOFFICE trả về file không hợp lệ dưới dạng DOCX.',
+                'ONLYOFFICE trả về file Office không hợp lệ.',
             );
         }
     }

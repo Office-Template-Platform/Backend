@@ -5,6 +5,7 @@
 // | 2   | Không tìm thấy    | Không tạo config cho ID lạ           | Reader trả null; gọi execute                 | Ném not-found và không gọi docs service               |
 // | 3   | Thiếu output file | Chặn mở editor khi chưa có file      | Reader trả READY nhưng outputFile=null       | Ném UserDocumentNotReadyError                         |
 // | 4   | Reader lỗi        | Không gọi editor khi đọc dữ liệu lỗi | Reader reject; gọi execute                   | Lỗi gốc được truyền lên, docs service không chạy      |
+// | 5   | Tài liệu PPTX     | Chọn Slide Editor cho PowerPoint      | Reader trả READY/PPTX; gọi execute             | Docs service nhận extension pptx                  |
 
 import { createHash } from 'node:crypto';
 import type { OnlyOfficeDocsService } from '@/integrations/onlyoffice/services/onlyoffice-docs.service';
@@ -126,7 +127,7 @@ describe('GetUserDocumentEditorConfigService', () => {
             ['document-1', 'workspace-1'],
         ]);
         expect(mockCreateEditorConfig.mock.calls).toEqual([
-            ['document-1', 'Báo cáo tháng', expectedKey],
+            ['document-1', 'Báo cáo tháng', expectedKey, 'docx'],
         ]);
     });
 
@@ -187,5 +188,37 @@ describe('GetUserDocumentEditorConfigService', () => {
             failure,
         );
         expect(mockCreateEditorConfig.mock.calls).toEqual([]);
+    });
+
+    // Test 6 chọn cấu hình Slide Editor cho PPTX để ONLYOFFICE mở đúng loại file.
+    it('should request a presentation editor config for PPTX files', async () => {
+        // Bước 1 - Arrange: record READY có output file là PPTX trong user workspace.
+        const pptxFile = {
+            ...documentRecord.outputFile!,
+            objectKey: 'presentations/deck.pptx',
+            originalFilename: 'deck.pptx',
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        };
+        mockFindUserDocumentByIdForWorkspace.mockResolvedValue({
+            ...documentRecord,
+            outputFile: pptxFile,
+        });
+
+        // Bước 2 - Act: tạo cấu hình cho bản PPTX hiện hành.
+        await target.execute('document-1', 'workspace-1');
+
+        // Bước 3 - Assert: giữ cùng key revision và truyền extension để chọn Slide Editor.
+        const expectedKey = createHash('sha256')
+            .update(
+                `document-1:${pptxFile.storageNamespace}:${pptxFile.objectKey}`,
+            )
+            .digest('hex');
+        expect(mockCreateEditorConfig).toHaveBeenCalledWith(
+            'document-1',
+            'Báo cáo tháng',
+            expectedKey,
+            'pptx',
+        );
     });
 });

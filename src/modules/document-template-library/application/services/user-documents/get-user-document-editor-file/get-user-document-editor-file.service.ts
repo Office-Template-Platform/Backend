@@ -1,4 +1,4 @@
-// Xác thực URL nội bộ trước khi Document Server đọc file DOCX của người dùng.
+// Xác thực URL nội bộ trước khi Document Server đọc file Office của người dùng.
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { OnlyOfficeDocsService } from '@/integrations/onlyoffice/services/onlyoffice-docs.service';
@@ -9,6 +9,8 @@ import {
 import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
 import { UserDocumentNotFoundError } from '@/modules/document-template-library/application/errors/user-document-not-found.error';
 import { UserDocumentNotReadyError } from '@/modules/document-template-library/application/errors/user-document-not-ready.error';
+import { getOfficeDocumentFormat } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
+import { UnsupportedMediaTypeException } from '@nestjs/common';
 
 export type UserDocumentEditorFile = {
     file: StoredFileReference;
@@ -44,6 +46,16 @@ export class GetUserDocumentEditorFileService {
             throw new UserDocumentNotReadyError();
         }
 
+        // Chỉ cấp byte cho hai định dạng editor đã có cấu hình và callback lưu tương ứng.
+        const fileFormat = getOfficeDocumentFormat(
+            document.outputFile.mimeType,
+        );
+        if (!fileFormat) {
+            throw new UnsupportedMediaTypeException(
+                'Trình soạn thảo tích hợp chỉ hỗ trợ file DOCX và PPTX.',
+            );
+        }
+
         // Xác minh token khớp document id và revision hiện hành để tránh URL bị lộ ra ngoài.
         const key = createEditorKey(document.id, document.outputFile);
         await this.onlyOfficeDocs.verifyDocumentFileToken(
@@ -54,7 +66,7 @@ export class GetUserDocumentEditorFileService {
 
         return {
             file: document.outputFile,
-            filename: `${document.title}.docx`,
+            filename: `${document.title}.${fileFormat.extension}`,
         };
     }
 }
