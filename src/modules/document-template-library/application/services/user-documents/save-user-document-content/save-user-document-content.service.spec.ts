@@ -1,14 +1,14 @@
-// Nhóm unit test cho SaveUserDocumentContentService: kiểm tra trạng thái, chuẩn hóa tên file và cleanup transaction.
-// | STT | Test case                | Mục đích                             | Các bước làm                                  | Kết quả mong đợi                             |
-// |-----|--------------------------|--------------------------------------|-----------------------------------------------|----------------------------------------------|
-// | 1   | READY và replace tốt     | Lưu file mới, xóa file cũ            | Reader ready; storage save; writer replace   | Trả summary, UUID key, tên basename           |
-// | 2   | Không tồn tại            | Không ghi file                       | Reader null; gọi execute                     | Ném not found, không gọi storage              |
-// | 3   | Chưa READY               | Chặn trước I/O                       | Reader provisioning/failed                   | Ném conflict, không gọi storage               |
-// | 4   | READY thiếu output       | Bảo vệ invariant                     | Reader ready nhưng output null               | Ném conflict, không gọi storage               |
-// | 5   | Save file lỗi            | Không đổi lỗi storage                | Storage reject trước transaction             | Writer không được gọi                         |
-// | 6   | Replace lỗi              | Dọn file mới                         | File mới được ghi; writer reject             | Xóa file mới và giữ lỗi transaction           |
-// | 7   | Xóa file cũ lỗi          | Giữ bản mới đã commit                | Replace thành công; cleanup cũ reject         | Trả summary thành công                         |
-// | 8   | Xóa file mới cũng lỗi    | Không che lỗi replace                | Writer reject; cleanup mới reject             | Reject đúng lỗi replace ban đầu               |
+// Nhóm unit test cho SaveUserDocumentContentService: xác nhận thay file theo thứ tự an toàn và chỉ dọn file cũ sau khi database commit.
+// | STT | Test case                     | Mục đích                              | Các bước làm                                           | Kết quả mong đợi                          |
+// |-----|-------------------------------|---------------------------------------|--------------------------------------------------------|-------------------------------------------|
+// | 1   | READY và thay file thành công | Lưu nội dung mới, dọn output cũ       | Reader trả READY; storage ghi file mới; writer replace | Trả summary mới và xóa file cũ sau commit |
+// | 2   | Document không tồn tại        | Dừng trước khi ghi file               | Reader trả null; gọi execute                           | Ném not-found, storage không chạy         |
+// | 3   | Document chưa sẵn sàng        | Chặn thay file thiếu output           | Reader trả trạng thái không READY hoặc thiếu file      | Ném UserDocumentNotReadyError             |
+// | 4   | Storage ghi lỗi               | Không mở transaction khi chưa có file | Reader hợp lệ; storage save reject                     | Truyền lỗi, writer không chạy             |
+// | 5   | Writer replace lỗi            | Dọn file mới chưa được tham chiếu     | Storage ghi file; writer replace reject                | Xóa file mới rồi truyền lỗi writer lên    |
+// | 6   | Dọn file cũ lỗi               | Giữ bản mới đã commit                 | Replace thành công; xóa file cũ reject                 | Trả summary mới, không rollback bản mới   |
+// | 7   | Dọn file mới cũng lỗi         | Giữ lỗi thay file ban đầu             | Replace reject; cleanup file mới cũng reject           | Lỗi replace gốc không bị che              |
+
 import { Logger } from '@nestjs/common';
 import type {
     DocumentFileStorageContract,
@@ -28,7 +28,12 @@ import { SaveUserDocumentContentService } from '@/modules/document-template-libr
 
 describe('SaveUserDocumentContentService', () => {
     let target: SaveUserDocumentContentService;
-    let mockDocumentReader: jest.Mocked<UserDocumentReaderContract>;
+    let mockDocumentReader: jest.Mocked<
+        Pick<
+            UserDocumentReaderContract,
+            'findUserDocumentById' | 'findUserDocumentByIdForWorkspace'
+        >
+    >;
     let mockDocumentWriter: jest.Mocked<UserDocumentWriterContract>;
     let mockFileStorage: jest.Mocked<DocumentFileStorageContract>;
     let currentDocument: UserDocumentRecord;
@@ -44,7 +49,10 @@ describe('SaveUserDocumentContentService', () => {
         jest.spyOn(Logger.prototype, 'error').mockImplementation(
             () => undefined,
         );
-        mockDocumentReader = { findUserDocumentById: jest.fn() };
+        mockDocumentReader = {
+            findUserDocumentById: jest.fn(),
+            findUserDocumentByIdForWorkspace: jest.fn(),
+        };
         mockDocumentWriter = {
             createProvisioningDocument: jest.fn(),
             completeDocument: jest.fn(),
@@ -91,7 +99,7 @@ describe('SaveUserDocumentContentService', () => {
             outputFile: newFile,
         };
         replaced = { document: updatedDocument, previousFile };
-        mockDocumentReader.findUserDocumentById.mockResolvedValue(
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue(
             currentDocument,
         );
         mockFileStorage.saveEditedDocument.mockResolvedValue(newFile);
@@ -124,8 +132,9 @@ describe('SaveUserDocumentContentService', () => {
         };
 
         // Bước 2 - Act: lưu nội dung đã chỉnh sửa.
-        const result = await target.execute(
+        const result = await target.executeForWorkspace(
             'document-1',
+            'workspace-1',
             content,
             'C:\\private\\Resume.docx\r\n',
         );
@@ -151,11 +160,18 @@ describe('SaveUserDocumentContentService', () => {
     // Test 2 dừng trước khi ghi file nếu id không tồn tại.
     it('should throw not found without writing when the document does not exist', async () => {
         // Bước 1 - Arrange: reader trả null cho id yêu cầu.
-        mockDocumentReader.findUserDocumentById.mockResolvedValue(null);
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue(
+            null,
+        );
 
         // Bước 2 - Act và Bước 3 - Assert: nhận lỗi 404 và không gọi storage/writer.
         await expect(
-            target.execute('missing-id', content, 'Resume.docx'),
+            target.executeForWorkspace(
+                'missing-id',
+                'workspace-1',
+                content,
+                'Resume.docx',
+            ),
         ).rejects.toBeInstanceOf(UserDocumentNotFoundError);
         expect(mockFileStorage.saveEditedDocument.mock.calls).toEqual([]);
         expect(mockDocumentWriter.replaceDocumentFile.mock.calls).toEqual([]);
@@ -166,15 +182,22 @@ describe('SaveUserDocumentContentService', () => {
         'should reject a document in %s state before writing',
         async (status) => {
             // Bước 1 - Arrange: tạo document chưa sẵn sàng với output file rỗng.
-            mockDocumentReader.findUserDocumentById.mockResolvedValue({
-                ...currentDocument,
-                status,
-                outputFile: null,
-            });
+            mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue(
+                {
+                    ...currentDocument,
+                    status,
+                    outputFile: null,
+                },
+            );
 
             // Bước 2 - Act và Bước 3 - Assert: trả HTTP 409 và không ghi file mới.
             await expect(
-                target.execute('document-1', content, 'Resume.docx'),
+                target.executeForWorkspace(
+                    'document-1',
+                    'workspace-1',
+                    content,
+                    'Resume.docx',
+                ),
             ).rejects.toBeInstanceOf(UserDocumentNotReadyError);
             expect(mockFileStorage.saveEditedDocument.mock.calls).toEqual([]);
         },
@@ -183,14 +206,19 @@ describe('SaveUserDocumentContentService', () => {
     // Test 4 fail closed khi record báo READY nhưng thiếu file reference hiện hành.
     it('should reject a ready document without an output file reference', async () => {
         // Bước 1 - Arrange: mô phỏng dữ liệu vi phạm database invariant.
-        mockDocumentReader.findUserDocumentById.mockResolvedValue({
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue({
             ...currentDocument,
             outputFile: null,
         });
 
         // Bước 2 - Act và Bước 3 - Assert: service không cố thay một reference không tồn tại.
         await expect(
-            target.execute('document-1', content, 'Resume.docx'),
+            target.executeForWorkspace(
+                'document-1',
+                'workspace-1',
+                content,
+                'Resume.docx',
+            ),
         ).rejects.toBeInstanceOf(UserDocumentNotReadyError);
         expect(mockFileStorage.saveEditedDocument.mock.calls).toEqual([]);
     });
@@ -203,7 +231,12 @@ describe('SaveUserDocumentContentService', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: giữ lỗi gốc và không thay database reference.
         await expect(
-            target.execute('document-1', content, 'Resume.docx'),
+            target.executeForWorkspace(
+                'document-1',
+                'workspace-1',
+                content,
+                'Resume.docx',
+            ),
         ).rejects.toBe(failure);
         expect(mockDocumentWriter.replaceDocumentFile.mock.calls).toEqual([]);
     });
@@ -216,7 +249,12 @@ describe('SaveUserDocumentContentService', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: dọn object mới và trả đúng lỗi persistence.
         await expect(
-            target.execute('document-1', content, 'Resume.docx'),
+            target.executeForWorkspace(
+                'document-1',
+                'workspace-1',
+                content,
+                'Resume.docx',
+            ),
         ).rejects.toBe(failure);
         expect(mockFileStorage.removeUserDocument.mock.calls).toEqual([
             [newFile],
@@ -231,8 +269,9 @@ describe('SaveUserDocumentContentService', () => {
         );
 
         // Bước 2 - Act: lưu nội dung và để use case thử cleanup file cũ.
-        const result = await target.execute(
+        const result = await target.executeForWorkspace(
             'document-1',
+            'workspace-1',
             content,
             'Resume.docx',
         );
@@ -255,7 +294,12 @@ describe('SaveUserDocumentContentService', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: lỗi gốc vẫn được chuyển tới caller.
         await expect(
-            target.execute('document-1', content, 'Resume.docx'),
+            target.executeForWorkspace(
+                'document-1',
+                'workspace-1',
+                content,
+                'Resume.docx',
+            ),
         ).rejects.toBe(failure);
     });
 });

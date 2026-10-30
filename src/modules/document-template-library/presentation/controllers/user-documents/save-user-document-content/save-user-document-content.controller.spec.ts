@@ -1,11 +1,10 @@
-// Nhóm unit test cho SaveUserDocumentContentController: kiểm tra upload, giới hạn và cấu trúc DOCX.
-// | STT | Test case       | Mục đích                            | Các bước làm                       | Kết quả mong đợi                    |
-// |-----|-----------------|-------------------------------------|------------------------------------|-------------------------------------|
-// | 1   | Thiếu file      | Chặn request sai multipart          | Gọi saveContent không có file      | HTTP 400, use case không được gọi   |
-// | 2   | File quá lớn    | Chặn payload trên 25 MiB            | Gửi file vượt ngưỡng               | HTTP 413, use case không được gọi   |
-// | 3   | MIME/đuôi sai   | Không tin metadata client           | Gửi MIME hoặc extension sai        | HTTP 415, use case không được gọi   |
-// | 4   | OOXML sai       | Chặn ZIP thiếu cấu trúc DOCX        | Thiếu signature hoặc part bắt buộc | HTTP 415, use case không được gọi   |
-// | 5   | DOCX hợp lệ     | Chuyển bytes nguyên vẹn sang use case | Gửi file có MIME, ZIP và OOXML hợp lệ | Trả result và đúng arguments    |
+// Nhóm unit test cho SaveUserDocumentContentController: kiểm tra upload multipart trước khi giao DOCX hợp lệ cho use case.
+// | STT | Test case          | Mục đích                               | Các bước làm                          | Kết quả mong đợi                         |
+// |-----|--------------------|----------------------------------------|---------------------------------------|------------------------------------------|
+// | 1   | Thiếu file         | Chặn request multipart không có file   | Gọi saveContent với file undefined    | Ném HTTP 400, service không được gọi     |
+// | 2   | File vượt giới hạn | Chặn file trên 25 MiB                  | Gửi uploaded file quá ngưỡng          | Ném HTTP 413, service không được gọi     |
+// | 3   | DOCX hợp lệ        | Chuyển bytes và filename sang use case | Gửi file DOCX hợp lệ; gọi saveContent | Service nhận đúng ID, buffer và tên file |
+
 import {
     BadRequestException,
     PayloadTooLargeException,
@@ -18,13 +17,13 @@ import { SaveUserDocumentContentController } from '@/modules/document-template-l
 describe('SaveUserDocumentContentController', () => {
     let target: SaveUserDocumentContentController;
     let mockSaveContent: jest.Mocked<
-        Pick<SaveUserDocumentContentService, 'execute'>
+        Pick<SaveUserDocumentContentService, 'executeForWorkspace'>
     >;
     const docxMimeType =
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
     beforeEach(() => {
-        mockSaveContent = { execute: jest.fn() };
+        mockSaveContent = { executeForWorkspace: jest.fn() };
         target = new SaveUserDocumentContentController(
             mockSaveContent as unknown as SaveUserDocumentContentService,
         );
@@ -41,9 +40,9 @@ describe('SaveUserDocumentContentController', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: controller trả HTTP 400, không gọi application.
         await expect(
-            target.saveContent(documentId, undefined),
+            target.saveContent(documentId, undefined, 'workspace-1'),
         ).rejects.toBeInstanceOf(BadRequestException);
-        expect(mockSaveContent.execute.mock.calls).toEqual([]);
+        expect(mockSaveContent.executeForWorkspace.mock.calls).toEqual([]);
     });
 
     // Test 2 handler giữ giới hạn 25 MiB kể cả khi cấu hình upload middleware thay đổi.
@@ -58,9 +57,9 @@ describe('SaveUserDocumentContentController', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: trả HTTP 413 trước khi kiểm tra bytes.
         await expect(
-            target.saveContent('document-1', oversizedFile),
+            target.saveContent('document-1', oversizedFile, 'workspace-1'),
         ).rejects.toBeInstanceOf(PayloadTooLargeException);
-        expect(mockSaveContent.execute.mock.calls).toEqual([]);
+        expect(mockSaveContent.executeForWorkspace.mock.calls).toEqual([]);
     });
 
     // Test 3 MIME và extension do client khai báo phải khớp DOCX trước khi đọc package.
@@ -82,9 +81,9 @@ describe('SaveUserDocumentContentController', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: metadata client không đạt thì trả HTTP 415.
         await expect(
-            target.saveContent('document-1', file),
+            target.saveContent('document-1', file, 'workspace-1'),
         ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
-        expect(mockSaveContent.execute.mock.calls).toEqual([]);
+        expect(mockSaveContent.executeForWorkspace.mock.calls).toEqual([]);
     });
 
     // Test 4 xác minh signature ZIP và hai part OOXML cần có trong tài liệu DOCX.
@@ -118,9 +117,9 @@ describe('SaveUserDocumentContentController', () => {
 
         // Bước 2 - Act và Bước 3 - Assert: không chuyển package sai sang use case.
         await expect(
-            target.saveContent('document-1', file),
+            target.saveContent('document-1', file, 'workspace-1'),
         ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
-        expect(mockSaveContent.execute.mock.calls).toEqual([]);
+        expect(mockSaveContent.executeForWorkspace.mock.calls).toEqual([]);
     });
 
     // Test 5 DOCX hợp lệ được chuyển nguyên buffer và filename qua application boundary.
@@ -147,16 +146,20 @@ describe('SaveUserDocumentContentController', () => {
             outputFile: null,
             sourceTemplate: { id: 'template-1', name: 'Resume', version: 1 },
         } satisfies UserDocumentRecord;
-        mockSaveContent.execute.mockResolvedValue(expected);
+        mockSaveContent.executeForWorkspace.mockResolvedValue(expected);
 
         // Bước 2 - Act: gửi upload đã xác thực đến endpoint PUT content.
-        const result = await target.saveContent('document-1', file);
+        const result = await target.saveContent(
+            'document-1',
+            file,
+            'workspace-1',
+        );
 
         // Bước 3 - Assert: trả result và không làm đổi bytes hay tên file.
         expect(result).toEqual(expected);
-        expect(mockSaveContent.execute.mock.calls).toEqual([
-            ['document-1', buffer, 'Resume.docx'],
+        expect(mockSaveContent.executeForWorkspace.mock.calls).toEqual([
+            ['document-1', 'workspace-1', buffer, 'Resume.docx'],
         ]);
-        expect(mockSaveContent.execute).toHaveBeenCalledTimes(1);
+        expect(mockSaveContent.executeForWorkspace).toHaveBeenCalledTimes(1);
     });
 });

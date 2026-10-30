@@ -8,6 +8,7 @@ import {
     Put,
     UnsupportedMediaTypeException,
     UploadedFile,
+    UseGuards,
     UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -20,6 +21,8 @@ import {
 } from '@nestjs/swagger';
 import { SaveUserDocumentContentService } from '@/modules/document-template-library/application/services/user-documents/save-user-document-content/save-user-document-content.service';
 import type { UploadedDocxFile } from '@/modules/document-template-library/presentation/types/uploaded-docx-file';
+import { CurrentAnonymousWorkspaceId } from '@/modules/document-template-library/presentation/decorators/current-anonymous-workspace-id.decorator';
+import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/presentation/guards/anonymous-workspace.guard';
 
 const MAX_EDITED_DOCX_SIZE = 25 * 1024 * 1024;
 const DOCX_MIME_TYPE =
@@ -28,6 +31,7 @@ const DOCX_ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
 @ApiTags('User documents')
 @Controller('user-documents')
+@UseGuards(AnonymousWorkspaceGuard)
 // Controller chỉ sở hữu endpoint upload DOCX, giới hạn request và giữ contract multipart.
 export class SaveUserDocumentContentController {
     constructor(
@@ -58,7 +62,8 @@ export class SaveUserDocumentContentController {
     // Thứ tự kiểm tra chặn request thiếu file và file quá cỡ trước khi đọc nội dung.
     async saveContent(
         @Param('documentId', ParseUUIDPipe) documentId: string,
-        @UploadedFile() file?: UploadedDocxFile,
+        @UploadedFile() file: UploadedDocxFile | undefined,
+        @CurrentAnonymousWorkspaceId() workspaceId: string,
     ) {
         if (!file) {
             throw new BadRequestException('Cần tải lên một file DOCX.');
@@ -83,8 +88,9 @@ export class SaveUserDocumentContentController {
             );
         }
 
-        return this.saveDocumentContent.execute(
+        return this.saveDocumentContent.executeForWorkspace(
             documentId,
+            workspaceId,
             file.buffer,
             file.originalname,
         );
