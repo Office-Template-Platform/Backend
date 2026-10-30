@@ -128,12 +128,24 @@ Base URL mặc định: `http://localhost:3001/api`
 | `GET`       | `/document-templates/:templateId`           | Chi tiết mẫu và phiên bản hiện hành            |
 | `GET`       | `/document-templates/:templateId/preview`   | Stream ảnh thumbnail                           |
 | `POST`      | `/document-templates/:templateId/documents` | Tạo bản DOCX riêng từ mẫu                      |
+| `GET`       | `/user-documents`                           | Liệt kê tài liệu của workspace hiện tại        |
 | `GET`       | `/user-documents/:documentId`               | Xem trạng thái và metadata tài liệu đã tạo     |
+| `GET`       | `/user-documents/:documentId/editor-config` | Lấy cấu hình mở lại tài liệu trong ONLYOFFICE  |
 | `PUT`       | `/user-documents/:documentId/content`       | Lưu DOCX đã chỉnh sửa (multipart field `file`) |
 | `GET`       | `/user-documents/:documentId/download`      | Tải DOCX đầu ra                                |
 | `GET`       | `/presentation-templates`                   | Liệt kê metadata mẫu trình chiếu               |
 
 `GET /document-templates` nhận `page` (mặc định `1`), `limit` (mặc định `12`, tối đa `100`), `search`, `categoryId` và `featured`. Ví dụ: `GET /api/document-templates?search=bao-cao&categoryId=<uuid>&page=1&limit=12`.
+
+### Tài liệu theo thiết bị khi chưa có đăng nhập
+
+API cấp cookie `office_template_workspace` dạng `HttpOnly` cho hồ sơ trình duyệt ở lần đầu gọi API tạo hoặc đọc tài liệu. PostgreSQL chỉ lưu SHA-256 của token; API gắn mỗi tài liệu mới với workspace đó và lọc danh sách, metadata, tải xuống, cấu hình editor và upload theo cùng owner. `GET /user-documents` nhận `page` (mặc định `1`), `limit` (mặc định `12`, tối đa `100`) và `search`; danh sách sắp theo `updatedAt` giảm dần để mở lại tài liệu vừa chỉnh.
+
+Để mở lại tài liệu, client lấy `id` từ danh sách rồi gọi `GET /user-documents/:documentId/editor-config`; API chỉ trả cấu hình editor khi ID thuộc workspace hiện tại. ONLYOFFICE tải revision theo URL có chữ ký và lưu bản cuối qua callback đã xác thực JWT.
+
+Workspace đại diện cho một hồ sơ trình duyệt trên máy chạy frontend, không phải tài khoản hoặc đường dẫn lưu trên ổ đĩa của người dùng. Cookie và record được gia hạn thêm 400 ngày mỗi khi workspace hoạt động. Xóa cookie, đổi browser profile hoặc hết hạn cookie sau 400 ngày không hoạt động sẽ mất quyền truy cập workspace đó; file vẫn nằm trong volume của API. Tài liệu tạo trước migration chưa có owner sẽ được gắn cho workspace đầu tiên mở lại tài liệu bằng URL/ID cũ; sau đó workspace khác chỉ nhận 404.
+
+Khi frontend và API có origin khác nhau, browser client cần gửi credentials (`credentials: 'include'`) để nhận và gửi cookie; CORS chỉ chấp nhận `WEB_ORIGIN` đã cấu hình và cho phép credentials. Callback ONLYOFFICE không dùng cookie này: callback tiếp tục xác thực JWT riêng và khóa ghi theo revision file.
 
 ### Mẫu DOCX được seed sẵn
 
@@ -224,6 +236,7 @@ api/
 │   │   │   ├── document-template-samples.seed.ts
 │   │   │   └── document-template-samples.seed.spec.ts
 │   │   ├── entities/
+│   │   │   ├── anonymous-workspace.entity.ts
 │   │   │   ├── office-template.entity.ts
 │   │   │   ├── office-template-version.entity.ts
 │   │   │   ├── presentation-slide-preview.entity.ts
@@ -231,7 +244,8 @@ api/
 │   │   │   ├── template-category.entity.ts
 │   │   │   └── user-document.entity.ts
 │   │   ├── migrations/
-│   │   │   └── 1793376000000-create-office-template-schema.ts
+│   │   │   ├── 1793376000000-create-office-template-schema.ts
+│   │   │   └── 1793380800000-add-anonymous-document-workspaces.ts
 │   │   └── enums/office-template.enums.ts
 │   └── modules/
 │       ├── health/
@@ -239,11 +253,12 @@ api/
 │       │   └── health.module.ts
 │       ├── document-template-library/
 │       │   ├── application/
-│       │   │   ├── contracts/              # Contract đọc mẫu, đọc/ghi tài liệu và storage
+│       │   │   ├── contracts/              # Contract đọc mẫu, workspace, đọc/ghi tài liệu và storage
 │       │   │   ├── errors/                 # Lỗi nghiệp vụ có HTTP status ổn định
 │       │   │   ├── services/
 │       │   │   │   ├── catalog/            # List/detail/preview, mỗi use case có folder riêng
-│       │   │   │   └── user-documents/     # Create/read/download/save, mỗi use case có folder riêng
+│       │   │   │   ├── user-documents/     # Create/list/read/download/save, mỗi use case có folder riêng
+│       │   │   │   └── workspaces/         # Cấp và xác thực danh tính ẩn danh
 │       │   │   ├── types/                  # Kiểu response nội bộ application
 │       │   │   └── utils/                  # Projection metadata không lộ storage key
 │       │   ├── infrastructure/
@@ -252,6 +267,7 @@ api/
 │       │   │   │   ├── read/
 │       │   │   │   │   ├── document-templates/ # Đọc catalog mẫu DOCX
 │       │   │   │   │   └── user-documents/     # Đọc tài liệu người dùng
+│       │   │   │   ├── workspaces/         # TypeORM adapter lưu token hash
 │       │   │   │   └── write/              # Transaction tạo/thay file user document
 │       │   │   └── storage/local-document-file-storage.ts
 │       │   ├── presentation/
@@ -264,9 +280,11 @@ api/
 │       │   │   │   │   └── create-user-document/            # POST /document-templates/:templateId/documents
 │       │   │   │   └── user-documents/
 │       │   │   │       ├── get-user-document/                # GET /user-documents/:documentId
+│       │   │   │       ├── list-user-documents/               # GET /user-documents
 │       │   │   │       ├── save-user-document-content/      # PUT /user-documents/:documentId/content
 │       │   │   │       └── download-user-document/          # GET /user-documents/:documentId/download
 │       │   │   ├── dto/                    # Validation cho request HTTP
+│       │   │   ├── guards/                 # Nhận diện anonymous workspace từ HttpOnly cookie
 │       │   │   └── types/uploaded-docx-file.ts
 │       │   └── document-template-library.module.ts
 │       └── presentation-template-library/
@@ -286,7 +304,7 @@ api/
 └── tsconfig.json
 ```
 
-`bootstrap/api` giữ composition root, factory cấu hình Nest và entry point của process. `src/http` chứa filter và interceptor dùng chung toàn API; `create-api-app.ts` đăng ký chúng vào request lifecycle, còn mỗi spec nằm cạnh implementation. Trong feature DOCX, controller/DTO thuộc `presentation`; contract, lỗi và use case thuộc `application`; TypeORM read/write repository cùng local file storage thuộc `infrastructure`. Mỗi use case nằm trong folder riêng cạnh spec của nó. Asset nguồn bất biến nằm trong `assets/`; file đầu ra được lưu riêng ở `FILE_STORAGE_ROOT`. Migration đầu tiên tạo sáu bảng metadata; feature mới dùng schema đó và không thêm migration.
+`bootstrap/api` giữ composition root, factory cấu hình Nest và entry point của process. `src/http` chứa filter và interceptor dùng chung toàn API; `create-api-app.ts` đăng ký chúng vào request lifecycle, còn mỗi spec nằm cạnh implementation. Trong feature DOCX, controller/DTO thuộc `presentation`; contract, lỗi và use case thuộc `application`; TypeORM read/write repository cùng local file storage thuộc `infrastructure`. Mỗi use case nằm trong folder riêng cạnh spec của nó. Asset nguồn bất biến nằm trong `assets/`; file đầu ra được lưu riêng ở `FILE_STORAGE_ROOT`. Migration đầu tiên tạo sáu bảng catalog; migration tiếp theo bổ sung workspace ẩn danh và gắn owner vào tài liệu người dùng.
 
 Mỗi file Jest mở đầu bằng bảng test case tiếng Việt, sau đó từng test ghi rõ bước Arrange, Act và Assert. Test service mock contract; test TypeORM repository mock query builder/transaction manager; test storage dùng thư mục tạm để kiểm tra bytes và path boundary.
 
@@ -360,6 +378,7 @@ classDiagram
 
     class USER_DOCUMENTS:::document {
         id: UUID PK
+        anonymous_workspace_id: UUID FK, nullable for legacy documents
         source_template_version_id: UUID FK
         title: VARCHAR, max 200 chars
         status: ENUM provisioning / ready / failed
@@ -370,6 +389,14 @@ classDiagram
         deleted_at: TIMESTAMPTZ, nullable
     }
 
+    class ANONYMOUS_WORKSPACES:::workspace {
+        id: UUID PK
+        token_hash: VARCHAR, 64 chars, UNIQUE
+        created_at: TIMESTAMPTZ
+        last_seen_at: TIMESTAMPTZ
+        expires_at: TIMESTAMPTZ
+    }
+
     TEMPLATE_CATEGORIES "1" --> "0..*" OFFICE_TEMPLATES : category_id
     OFFICE_TEMPLATES "1" --> "0..*" OFFICE_TEMPLATE_VERSIONS : template_id
     OFFICE_TEMPLATE_VERSIONS "1" --> "0..*" PRESENTATION_SLIDE_PREVIEWS : version_id
@@ -378,6 +405,7 @@ classDiagram
     PRESENTATION_SLIDE_PREVIEWS "0..*" --> "1" STORED_FILES : preview_file_id
     USER_DOCUMENTS "0..*" --> "1" OFFICE_TEMPLATE_VERSIONS : source_template_version_id
     USER_DOCUMENTS "0..*" --> "0..1" STORED_FILES : output_file_id
+    ANONYMOUS_WORKSPACES "0..1" --> "0..*" USER_DOCUMENTS : anonymous_workspace_id
 
     classDef category fill:#ede9fe,stroke:#7c3aed,color:#2e1065,stroke-width:2px
     classDef template fill:#dbeafe,stroke:#2563eb,color:#172554,stroke-width:2px
@@ -385,26 +413,30 @@ classDiagram
     classDef preview fill:#fce7f3,stroke:#db2777,color:#831843,stroke-width:2px
     classDef file fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
     classDef document fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef workspace fill:#e0e7ff,stroke:#4f46e5,color:#312e81,stroke-width:2px
 ```
 
-Mỗi khối là một bảng; field được viết theo dạng `tên_field: kiểu dữ liệu`, sau đó là khóa và ràng buộc như `PK`, `FK`, `UNIQUE`, `nullable`, `default` hoặc giới hạn độ dài. Cardinality ở hai đầu đường nối thể hiện số bản ghi có thể liên kết. `product_type` phân biệt mẫu văn bản và trình chiếu; danh mục có thể dùng chung. Tài liệu được tạo ghim vào phiên bản mẫu đã chọn. Ràng buộc còn gồm slug duy nhất theo loại mẫu, số phiên bản duy nhất trên mỗi mẫu, tối đa một phiên bản hiện hành trên mỗi mẫu, và số slide duy nhất trong mỗi phiên bản.
+Mỗi khối là một bảng; field được viết theo dạng `tên_field: kiểu dữ liệu`, sau đó là khóa và ràng buộc như `PK`, `FK`, `UNIQUE`, `nullable`, `default` hoặc giới hạn độ dài. Cardinality ở hai đầu đường nối thể hiện số bản ghi có thể liên kết. `product_type` phân biệt mẫu văn bản và trình chiếu; danh mục có thể dùng chung. Tài liệu được tạo ghim vào phiên bản mẫu đã chọn và workspace thiết bị; workspace chỉ lưu hash token. `anonymous_workspace_id` nullable để xử lý tài liệu được tạo trước khi có cơ chế này. Ràng buộc còn gồm slug duy nhất theo loại mẫu, số phiên bản duy nhất trên mỗi mẫu, tối đa một phiên bản hiện hành trên mỗi mẫu, và số slide duy nhất trong mỗi phiên bản.
 
 ## Tính năng và trạng thái
 
-| Hạng mục                                                | Trạng thái                |
-| ------------------------------------------------------- | ------------------------- |
-| NestJS bootstrap, CORS, validation và Swagger           | Đã triển khai             |
-| Health check                                            | Đã triển khai             |
-| Thư viện mẫu DOCX: tìm kiếm, lọc, phân trang và preview | Đã triển khai, có 5 mẫu   |
-| Tạo bản DOCX riêng và tải xuống                         | Đã triển khai             |
-| Response envelope thành công và lỗi                     | Đã triển khai toàn API    |
-| Endpoint danh mục mẫu trình chiếu                       | Có route, chưa có dữ liệu |
-| Entity TypeORM cho mô hình dữ liệu                      | Đã triển khai             |
-| Kết nối PostgreSQL và migration                         | Đã triển khai             |
-| Chỉnh sửa nội dung bằng editor nhúng                    | Chưa triển khai           |
-| Tạo bản sao và tải xuống PPTX                           | Chưa triển khai           |
+| Hạng mục                                                | Trạng thái                                  |
+| ------------------------------------------------------- | ------------------------------------------- |
+| NestJS bootstrap, CORS, validation và Swagger           | Đã triển khai                               |
+| Health check                                            | Đã triển khai                               |
+| Thư viện mẫu DOCX: tìm kiếm, lọc, phân trang và preview | Đã triển khai, có 5 mẫu                     |
+| Tạo bản DOCX riêng và tải xuống                         | Đã triển khai                               |
+| Workspace ẩn danh, giới hạn tài liệu theo trình duyệt   | Đã triển khai phía API                      |
+| Danh sách tài liệu và mở lại tài liệu đã lưu            | Đã triển khai phía API                      |
+| Lưu DOCX qua callback ONLYOFFICE                        | Có luồng; cần xác nhận cấu hình Docs Server |
+| Response envelope thành công và lỗi                     | Đã triển khai toàn API                      |
+| Endpoint danh mục mẫu trình chiếu                       | Có route, chưa có dữ liệu                   |
+| Entity TypeORM cho mô hình dữ liệu                      | Đã triển khai                               |
+| Kết nối PostgreSQL và migration                         | Đã triển khai                               |
+| Chỉnh sửa nội dung bằng editor nhúng                    | Đã tích hợp; cần Docs Server hoạt động đúng |
+| Tạo bản sao và tải xuống PPTX                           | Chưa triển khai                             |
 
-Editor nhúng phía trình duyệt chưa được tích hợp; API đã nhận file DOCX đã sửa qua `PUT /user-documents/:documentId/content`, còn giao diện sẽ kết nối luồng này ở bước frontend. Tài liệu hiện được tra cứu bằng UUID; phân quyền theo tài khoản chưa nằm trong phạm vi MVP vì hệ thống chưa có xác thực người dùng.
+ONLYOFFICE callback thay bản DOCX hiện hành sau khi nhận callback lưu cuối `status: 2`; API cũng có `PUT /user-documents/:documentId/content` cho luồng upload trực tiếp. Bản cũ bị thay thế nên API hiện mở lại bản đã lưu gần nhất, chưa giữ lịch sử phiên bản. Người dùng chưa có tài khoản; cookie workspace giới hạn dữ liệu theo hồ sơ trình duyệt và không đồng bộ giữa máy.
 
 ## Lệnh phát triển
 
