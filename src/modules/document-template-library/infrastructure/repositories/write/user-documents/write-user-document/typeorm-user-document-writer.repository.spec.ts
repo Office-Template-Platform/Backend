@@ -16,7 +16,7 @@ import {
     FileStorageProvider,
     UserDocumentStatus,
 } from '@/database/enums/office-template.enums';
-import { TypeOrmUserDocumentWriterRepository } from '@/modules/document-template-library/infrastructure/repositories/write/typeorm-user-document-writer.repository';
+import { TypeOrmUserDocumentWriterRepository } from '@/modules/document-template-library/infrastructure/repositories/write/user-documents/write-user-document/typeorm-user-document-writer.repository';
 
 describe('TypeOrmUserDocumentWriterRepository', () => {
     let target: TypeOrmUserDocumentWriterRepository;
@@ -174,6 +174,10 @@ describe('TypeOrmUserDocumentWriterRepository', () => {
             },
         });
         expect(mockTransaction.mock.calls).toHaveLength(1);
+        expect(mockManager.findOne).toHaveBeenNthCalledWith(1, UserDocument, {
+            where: { id: 'document-1' },
+            lock: { mode: 'pessimistic_write' },
+        });
         expect(mockManager.create).toHaveBeenCalledWith(
             StoredFile,
             expect.objectContaining({ provider: FileStorageProvider.LOCAL }),

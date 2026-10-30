@@ -64,6 +64,8 @@ export class TypeOrmUserDocumentWriterRepository implements UserDocumentWriterCo
             const savedFile = await manager.save(file);
             const document = await manager.findOne(UserDocument, {
                 where: { id: documentId },
+                // Đồng bộ với xóa mềm: nếu xóa thắng, bản ghi không được hoàn tất thành tài liệu ẩn còn file mồ côi.
+                lock: { mode: 'pessimistic_write' },
             });
 
             if (!document) {

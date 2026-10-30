@@ -9,6 +9,7 @@ import { OnlyOfficeDocsModule } from '@/integrations/onlyoffice/onlyoffice-docs.
 import { DOCUMENT_FILE_STORAGE } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
 import { DOCUMENT_TEMPLATE_READER } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { ANONYMOUS_WORKSPACE_REPOSITORY } from '@/modules/document-template-library/application/contracts/anonymous-workspace-repository.contract';
+import { USER_DOCUMENT_DELETER } from '@/modules/document-template-library/application/contracts/user-document-deleter.contract';
 import { USER_DOCUMENT_READER } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
 import { USER_DOCUMENT_WRITER } from '@/modules/document-template-library/application/contracts/user-document-writer.contract';
 import { GetDocumentTemplateService } from '@/modules/document-template-library/application/services/catalog/get-document-template/get-document-template.service';
@@ -16,6 +17,7 @@ import { GetDocumentTemplatePreviewService } from '@/modules/document-template-l
 import { ListDocumentTemplateCategoriesService } from '@/modules/document-template-library/application/services/catalog/list-document-template-categories/list-document-template-categories.service';
 import { ListDocumentTemplatesService } from '@/modules/document-template-library/application/services/catalog/list-document-templates/list-document-templates.service';
 import { CreateUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/create-user-document/create-user-document.service';
+import { DeleteUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/delete-user-document/delete-user-document.service';
 import { DownloadUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/download-user-document/download-user-document.service';
 import { GetUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/get-user-document/get-user-document.service';
 import { GetUserDocumentEditorConfigService } from '@/modules/document-template-library/application/services/user-documents/get-user-document-editor-config/get-user-document-editor-config.service';
@@ -25,11 +27,13 @@ import { ListUserDocumentsService } from '@/modules/document-template-library/ap
 import { SaveUserDocumentContentService } from '@/modules/document-template-library/application/services/user-documents/save-user-document-content/save-user-document-content.service';
 import { AnonymousWorkspaceService } from '@/modules/document-template-library/application/services/workspaces/anonymous-workspace.service';
 import { TypeOrmAnonymousWorkspaceRepository } from '@/modules/document-template-library/infrastructure/repositories/workspaces/typeorm-anonymous-workspace.repository';
+import { TypeOrmUserDocumentDeleterRepository } from '@/modules/document-template-library/infrastructure/repositories/write/user-documents/delete-user-document/typeorm-user-document-deleter.repository';
 import { TypeOrmDocumentTemplateReaderRepository } from '@/modules/document-template-library/infrastructure/repositories/read/document-templates/typeorm-document-template-reader.repository';
 import { TypeOrmUserDocumentReaderRepository } from '@/modules/document-template-library/infrastructure/repositories/read/user-documents/typeorm-user-document-reader.repository';
-import { TypeOrmUserDocumentWriterRepository } from '@/modules/document-template-library/infrastructure/repositories/write/typeorm-user-document-writer.repository';
+import { TypeOrmUserDocumentWriterRepository } from '@/modules/document-template-library/infrastructure/repositories/write/user-documents/write-user-document/typeorm-user-document-writer.repository';
 import { LocalDocumentFileStorage } from '@/modules/document-template-library/infrastructure/storage/local-document-file-storage';
 import { CreateUserDocumentController } from '@/modules/document-template-library/presentation/controllers/document-templates/create-user-document/create-user-document.controller';
+import { DeleteUserDocumentController } from '@/modules/document-template-library/presentation/controllers/user-documents/delete-user-document/delete-user-document.controller';
 import { GetDocumentTemplateController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template/get-document-template.controller';
 import { GetDocumentTemplatePreviewController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template-preview/get-document-template-preview.controller';
 import { ListDocumentTemplateCategoriesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-template-categories/list-document-template-categories.controller';
@@ -57,6 +61,7 @@ import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/pre
         GetDocumentTemplateController,
         GetDocumentTemplatePreviewController,
         CreateUserDocumentController,
+        DeleteUserDocumentController,
         GetUserDocumentController,
         ListUserDocumentsController,
         SaveUserDocumentContentController,
@@ -69,6 +74,7 @@ import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/pre
         GetDocumentTemplateService,
         GetDocumentTemplatePreviewService,
         CreateUserDocumentService,
+        DeleteUserDocumentService,
         GetUserDocumentService,
         ListUserDocumentsService,
         SaveUserDocumentContentService,
@@ -82,6 +88,7 @@ import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/pre
         TypeOrmDocumentTemplateReaderRepository,
         TypeOrmUserDocumentReaderRepository,
         TypeOrmUserDocumentWriterRepository,
+        TypeOrmUserDocumentDeleterRepository,
         LocalDocumentFileStorage,
         {
             provide: ANONYMOUS_WORKSPACE_REPOSITORY,
@@ -100,10 +107,15 @@ import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/pre
             useExisting: TypeOrmUserDocumentWriterRepository,
         },
         {
+            provide: USER_DOCUMENT_DELETER,
+            useExisting: TypeOrmUserDocumentDeleterRepository,
+        },
+        {
             provide: DOCUMENT_FILE_STORAGE,
             useExisting: LocalDocumentFileStorage,
         },
     ],
+    // Các workflow Office khác tái sử dụng đúng workspace, writer và file storage đã được cấu hình.
     exports: [
         DOCUMENT_FILE_STORAGE,
         USER_DOCUMENT_WRITER,
