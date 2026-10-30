@@ -112,23 +112,23 @@ export class SaveUserDocumentContentService {
             );
         }
 
-        // Giữ nguyên định dạng của bản sao để file tải lên không biến PPTX thành DOCX hoặc ngược lại.
+        // Bước 2.1: chuẩn hóa tên trước khi kiểm tra extension vì client có thể gửi path Windows và CR/LF cuối tên.
+        const originalFilename = basename(uploadedFilename.replace(/\\/g, '/'))
+            .replace(/[\r\n]/g, '')
+            .slice(0, 255);
+
+        // Bước 2.2: MIME của file hiện hành quyết định format; tên đã chuẩn hóa phải cùng extension để không đổi DOCX/PPTX.
         const fileFormat = getOfficeDocumentFormat(current.outputFile.mimeType);
         if (
             !fileFormat ||
-            !uploadedFilename.toLowerCase().endsWith(`.${fileFormat.extension}`)
+            !originalFilename.toLowerCase().endsWith(`.${fileFormat.extension}`)
         ) {
             throw new UnsupportedMediaTypeException(
                 'File tải lên phải cùng định dạng với tài liệu đang sửa.',
             );
         }
 
-        // Bước 2.1: bỏ thư mục client gửi, xử lý dấu phân cách Windows, loại CR/LF và giới hạn metadata 255 ký tự.
-        const originalFilename = basename(uploadedFilename.replace(/\\/g, '/'))
-            .replace(/[\r\n]/g, '')
-            .slice(0, 255);
-
-        // Bước 2.2: dùng UUID làm object key; nếu storage lỗi thì database chưa bị thay đổi.
+        // Bước 2.3: dùng UUID làm object key; nếu storage lỗi thì database chưa bị thay đổi.
         const newFile = await this.fileStorage.saveEditedDocument(
             content,
             `${randomUUID()}.${fileFormat.extension}`,
