@@ -11,12 +11,14 @@ import { GetDocumentTemplateService } from '@/modules/document-template-library/
 import { GetDocumentTemplatePreviewService } from '@/modules/document-template-library/application/services/catalog/get-document-template-preview/get-document-template-preview.service';
 import { CreateUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/create-user-document/create-user-document.service';
 import { GetUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/get-user-document/get-user-document.service';
+import { SaveUserDocumentContentService } from '@/modules/document-template-library/application/services/user-documents/save-user-document-content/save-user-document-content.service';
 import { ListDocumentTemplatesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-templates/list-document-templates.controller';
 import { ListDocumentTemplateCategoriesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-template-categories/list-document-template-categories.controller';
 import { GetDocumentTemplateController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template/get-document-template.controller';
 import { GetDocumentTemplatePreviewController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template-preview/get-document-template-preview.controller';
 import { CreateUserDocumentController } from '@/modules/document-template-library/presentation/controllers/document-templates/create-user-document/create-user-document.controller';
 import { GetUserDocumentController } from '@/modules/document-template-library/presentation/controllers/user-documents/get-user-document/get-user-document.controller';
+import { SaveUserDocumentContentController } from '@/modules/document-template-library/presentation/controllers/user-documents/save-user-document-content/save-user-document-content.controller';
 import { DOCUMENT_TEMPLATE_READER } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { TypeOrmDocumentTemplateReaderRepository } from '@/modules/document-template-library/infrastructure/repositories/read/document-templates/typeorm-document-template-reader.repository';
 import { DOCUMENT_FILE_STORAGE } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
@@ -28,7 +30,7 @@ import { TypeOrmUserDocumentReaderRepository } from '@/modules/document-template
 
 @Module({
     imports: [TypeOrmModule.forFeature([OfficeTemplate, TemplateCategory, StoredFile, UserDocument])],
-    controllers: [ListDocumentTemplatesController, ListDocumentTemplateCategoriesController, GetDocumentTemplateController, GetDocumentTemplatePreviewController, CreateUserDocumentController, GetUserDocumentController],
+    controllers: [ListDocumentTemplatesController, ListDocumentTemplateCategoriesController, GetDocumentTemplateController, GetDocumentTemplatePreviewController, CreateUserDocumentController, GetUserDocumentController, SaveUserDocumentContentController],
     providers: [
         ListDocumentTemplatesService,
         ListDocumentTemplateCategoriesService,
@@ -36,6 +38,7 @@ import { TypeOrmUserDocumentReaderRepository } from '@/modules/document-template
         GetDocumentTemplatePreviewService,
         CreateUserDocumentService,
         GetUserDocumentService,
+        SaveUserDocumentContentService,
         TypeOrmDocumentTemplateReaderRepository,
         LocalDocumentFileStorage,
         TypeOrmUserDocumentWriterRepository,
