@@ -19,12 +19,22 @@ export class DownloadUserDocumentService {
     // Reader chịu trách nhiệm nạp bản ghi và metadata file hiện tại.
     constructor(
         @Inject(USER_DOCUMENT_READER)
-        private readonly documentReader: UserDocumentReaderContract,
+        private readonly documentReader: Pick<
+            UserDocumentReaderContract,
+            'findUserDocumentByIdForWorkspace'
+        >,
     ) {}
 
     // Phân biệt tài liệu không tồn tại với tài liệu đang tạo/thất bại để client xử lý đúng.
-    async execute(id: string): Promise<UserDocumentDownload> {
-        const document = await this.documentReader.findUserDocumentById(id);
+    async execute(
+        id: string,
+        workspaceId: string,
+    ): Promise<UserDocumentDownload> {
+        const document =
+            await this.documentReader.findUserDocumentByIdForWorkspace(
+                id,
+                workspaceId,
+            );
 
         if (!document) {
             throw new UserDocumentNotFoundError();

@@ -1,7 +1,8 @@
-// Nhóm unit test cho DownloadUserDocumentController: kiểm tra file được stream với MIME và tên Unicode.
-// | STT | Test case       | Mục đích                         | Các bước làm                         | Kết quả mong đợi                         |
-// |-----|-----------------|----------------------------------|--------------------------------------|------------------------------------------|
-// | 1   | File sẵn sàng   | Tải DOCX dạng attachment         | Use case trả file; storage mở stream | StreamableFile có MIME và tên RFC 5987   |
+// Nhóm unit test cho DownloadUserDocumentController: xác nhận DOCX được stream dạng attachment với filename UTF-8 an toàn.
+// | STT | Test case     | Mục đích                                | Các bước làm                              | Kết quả mong đợi                                 |
+// |-----|---------------|-----------------------------------------|-------------------------------------------|--------------------------------------------------|
+// | 1   | File sẵn sàng | Trả attachment đúng MIME và tên Unicode | Use case trả file/name; storage mở stream | StreamableFile có DOCX MIME và filename RFC 5987 |
+
 import { StreamableFile } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import type {
@@ -58,7 +59,7 @@ describe('DownloadUserDocumentController', () => {
         mockFileStorage.openReadStream.mockResolvedValue(stream);
 
         // Bước 2 - Act: gọi endpoint GET /user-documents/:documentId/download.
-        const result = await target.download('document-1');
+        const result = await target.download('document-1', 'workspace-1');
 
         // Bước 3 - Assert: response giữ binary stream, MIME và RFC 5987 filename.
         expect(result).toBeInstanceOf(StreamableFile);
@@ -69,7 +70,7 @@ describe('DownloadUserDocumentController', () => {
         });
         expect(result.getStream()).toBe(stream);
         expect(mockDownloadDocument.execute.mock.calls).toEqual([
-            ['document-1'],
+            ['document-1', 'workspace-1'],
         ]);
         expect(mockFileStorage.openReadStream.mock.calls).toEqual([[file]]);
     });
