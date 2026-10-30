@@ -1,15 +1,14 @@
-# 1. Project và thứ tự khởi động
-# Tên group, image, cổng, credential và địa chỉ bind được lấy từ api/.env.
-# Compose chờ PostgreSQL healthy, chạy migration một lần, rồi mới khởi động API.
-# Mặc định các cổng chỉ bind vào 127.0.0.1; `docker compose down` giữ volume dữ liệu.
+# 1. Hệ thống và thứ tự khởi động
+# Gồm PostgreSQL local, job migration/seed và API NestJS; cấu hình lấy từ api/.env.
+# PostgreSQL healthy → migration và seed thành công → API; API_HOST_PORT:PORT và DB_HOST_PORT:DB_PORT.
+# Host port chỉ bind vào 127.0.0.1; `docker compose down` giữ database và file DOCX đầu ra.
 name: ${COMPOSE_PROJECT_NAME:?Set COMPOSE_PROJECT_NAME in api/.env}
 
 services:
     postgres:
-        # 2. PostgreSQL local
-        # Lưu schema và dữ liệu; image, credential, bind address và port lấy từ api/.env.
-        # Health check chỉ thành công khi database nhận kết nối; migration chờ điều kiện này.
-        # Dữ liệu nằm trong volume riêng để tồn tại qua lần dừng hoặc tạo lại container.
+        # Service: PostgreSQL 17 local; Port: DB_HOST_PORT trên host → DB_PORT trong container.
+        # Vai trò: lưu schema và dữ liệu trong volume riêng để tồn tại qua lần recreate.
+        # Kết nối: API và migrate dùng DNS service `postgres`; job migrate chờ health check.
         container_name: ${POSTGRES_CONTAINER_NAME:?Set POSTGRES_CONTAINER_NAME in api/.env}
         image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE in api/.env}
         restart: unless-stopped
@@ -37,10 +36,9 @@ services:
             - office-template-platform-network
 
     migrate:
-        # 3. Migration runner
-        # Job một lần dùng image API để áp dụng các migration đã biên dịch lên PostgreSQL.
-        # Không publish port; chỉ chạy sau khi PostgreSQL healthy và thoát khi hoàn tất.
-        # API chỉ khởi động khi job kết thúc thành công, tránh phục vụ trên schema cũ.
+        # Service: job một lần; Port: không publish ra host hoặc network.
+        # Vai trò: áp dụng migration, seed 5 mẫu DOCX mới và dọn bộ demo cũ trước khi API khởi động.
+        # Kết nối: PostgreSQL qua DNS service `postgres`; chỉ chạy sau health check.
         container_name: ${MIGRATE_CONTAINER_NAME:?Set MIGRATE_CONTAINER_NAME in api/.env}
         image: ${API_IMAGE:?Set API_IMAGE in api/.env}
         init: true
@@ -55,13 +53,11 @@ services:
             DB_SSL: ${DB_SSL:?Set DB_SSL in api/.env}
             DB_LOGGING: ${DB_LOGGING:?Set DB_LOGGING in api/.env}
         command:
-            [
-                'node',
-                './node_modules/typeorm/cli.js',
-                'migration:run',
-                '-d',
-                'dist/database/config/data-source.js',
-            ]
+            - sh
+            - -c
+            - >-
+                node ./node_modules/typeorm/cli.js migration:run -d dist/database/config/data-source.js
+                && node dist/database/seeds/document-template-samples.seed.js
         depends_on:
             postgres:
                 condition: service_healthy
@@ -69,10 +65,9 @@ services:
             - office-template-platform-network
 
     api:
-        # 4. NestJS HTTP API
-        # Tạo runtime image từ Dockerfile; host port lấy từ API_HOST_PORT, port ứng dụng từ PORT.
-        # Chỉ khởi động sau migration; health check xác nhận endpoint /api/health phản hồi.
-        # Kết nối PostgreSQL bằng host nội bộ và credential lấy từ api/.env.
+        # Service: NestJS HTTP API; Port: API_HOST_PORT trên host → PORT trong container.
+        # Vai trò: phục vụ thư viện mẫu DOCX; health check gọi /api/health.
+        # Kết nối: PostgreSQL qua DNS `postgres`; dữ liệu DOCX đầu ra ở named volume riêng.
         container_name: ${API_CONTAINER_NAME:?Set API_CONTAINER_NAME in api/.env}
         image: ${API_IMAGE:?Set API_IMAGE in api/.env}
         build:
@@ -85,6 +80,7 @@ services:
             NODE_ENV: ${API_NODE_ENV:?Set API_NODE_ENV in api/.env}
             PORT: ${PORT:?Set PORT in api/.env}
             WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN in api/.env}
+            FILE_STORAGE_ROOT: ${FILE_STORAGE_ROOT_DOCKER:?Set FILE_STORAGE_ROOT_DOCKER in api/.env}
             DB_HOST: ${DB_HOST_DOCKER:?Set DB_HOST_DOCKER in api/.env}
             DB_PORT: ${DB_PORT:?Set DB_PORT in api/.env}
             DB_USER: ${DB_USER:?Set DB_USER in api/.env}
@@ -94,6 +90,8 @@ services:
             DB_LOGGING: ${DB_LOGGING:?Set DB_LOGGING in api/.env}
         ports:
             - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${API_HOST_PORT:?Set API_HOST_PORT in api/.env}:${PORT:?Set PORT in api/.env}'
+        volumes:
+            - office-template-api-file-storage:/app/storage
         depends_on:
             migrate:
                 condition: service_completed_successfully
@@ -118,6 +116,9 @@ volumes:
         name: ${DB_VOLUME_NAME:?Set DB_VOLUME_NAME in api/.env}
         # Volume external giúp project mới gắn lại đúng database local đang có.
         external: true
+    office-template-api-file-storage:
+        name: ${FILE_STORAGE_VOLUME_NAME:?Set FILE_STORAGE_VOLUME_NAME in api/.env}
+        # Giữ file DOCX người dùng tạo qua lần recreate hoặc cập nhật API container.
 
 networks:
     office-template-platform-network:
