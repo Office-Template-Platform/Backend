@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import type { PostgresDataSourceOptions } from 'typeorm/driver/postgres/PostgresDataSourceOptions';
 import { OfficeTemplateVersion } from '@/database/entities/office-template-version.entity';
 import { OfficeTemplate } from '@/database/entities/office-template.entity';
+import { AnonymousWorkspace } from '@/database/entities/anonymous-workspace.entity';
 import { PresentationSlidePreview } from '@/database/entities/presentation-slide-preview.entity';
 import { StoredFile } from '@/database/entities/stored-file.entity';
 import { TemplateCategory } from '@/database/entities/template-category.entity';
@@ -61,6 +62,7 @@ export function createDatabaseOptions(): PostgresDataSourceOptions {
             StoredFile,
             PresentationSlidePreview,
             UserDocument,
+            AnonymousWorkspace,
         ],
         migrations: [migrationPath],
         migrationsRun: false,

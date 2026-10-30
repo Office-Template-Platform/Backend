@@ -11,6 +11,7 @@ import {
     UpdateDateColumn,
 } from 'typeorm';
 import { OfficeTemplateVersion } from '@/database/entities/office-template-version.entity';
+import { AnonymousWorkspace } from '@/database/entities/anonymous-workspace.entity';
 import { StoredFile } from '@/database/entities/stored-file.entity';
 import { UserDocumentStatus } from '@/database/enums/office-template.enums';
 
@@ -19,6 +20,10 @@ import { UserDocumentStatus } from '@/database/enums/office-template.enums';
 @Index('idx_user_documents_source_created', [
     'sourceTemplateVersionId',
     'createdAt',
+])
+@Index('idx_user_documents_workspace_updated', [
+    'anonymousWorkspaceId',
+    'updatedAt',
 ])
 @Index('idx_user_documents_status_updated', ['status', 'updatedAt'])
 @Check(
@@ -42,6 +47,20 @@ export class UserDocument {
         referencedColumnName: 'id',
     })
     sourceTemplateVersion!: OfficeTemplateVersion;
+
+    // NULL chỉ dành cho tài liệu cũ trước khi thiết bị đầu tiên mở lại bằng URL đã lưu.
+    @Column({ name: 'anonymous_workspace_id', type: 'uuid', nullable: true })
+    anonymousWorkspaceId!: string | null;
+
+    @ManyToOne(() => AnonymousWorkspace, {
+        nullable: true,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({
+        name: 'anonymous_workspace_id',
+        referencedColumnName: 'id',
+    })
+    anonymousWorkspace!: AnonymousWorkspace | null;
 
     @Column({ type: 'varchar', length: 200 })
     title!: string;

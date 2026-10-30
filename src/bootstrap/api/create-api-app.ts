@@ -18,6 +18,7 @@ export async function createApiApp() {
     app.useGlobalFilters(new ApiExceptionFilter());
     app.enableCors({
         origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+        credentials: true,
     });
 
     // DTO sẽ được chuyển kiểu và loại bỏ dữ liệu ngoài hợp đồng khi thêm endpoint ghi.
