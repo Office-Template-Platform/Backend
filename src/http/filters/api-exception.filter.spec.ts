@@ -1,11 +1,12 @@
-// Nhóm unit test cho ApiExceptionFilter: kiểm tra HTTP errors, Multer errors và ẩn lỗi nội bộ.
-// | STT | Test case               | Mục đích                            | Các bước làm                         | Kết quả mong đợi                           |
-// |-----|-------------------------|-------------------------------------|--------------------------------------|--------------------------------------------|
-// | 1   | HTTP 400 với array      | Giữ status và validation messages   | Gửi BadRequestException               | Envelope code/message/meta đúng             |
-// | 2   | HTTP string response    | Hỗ trợ exception trả string          | Gửi HttpException(string, 409)        | Giữ nguyên message và status               |
-// | 3   | File vượt giới hạn      | Chuẩn hóa lỗi Multer 413             | Gửi LIMIT_FILE_SIZE                   | PAYLOAD_TOO_LARGE, status 413              |
-// | 4   | Multipart sai           | Chuẩn hóa lỗi upload 400              | Gửi MulterError khác                  | INVALID_MULTIPART, status 400              |
-// | 5   | Lỗi không biết          | Không lộ exception/stack cho client  | Gửi Error nội bộ                      | HTTP 500 với message an toàn                |
+// Nhóm unit test cho ApiExceptionFilter: xác nhận lỗi HTTP, lỗi upload và exception nội bộ được chuẩn hóa an toàn.
+// | STT | Test case                | Mục đích                               | Các bước làm                                         | Kết quả mong đợi                      |
+// |-----|--------------------------|----------------------------------------|------------------------------------------------------|---------------------------------------|
+// | 1   | Validation trả mảng lỗi  | Giữ status và messages của validation  | Ném BadRequestException có message array; gọi filter | Response 400 có error envelope đúng   |
+// | 2   | HTTP response là chuỗi   | Giữ message và status không mặc định   | Ném HttpException chuỗi với status 409; gọi filter   | Response 409 giữ nguyên message       |
+// | 3   | Upload vượt dung lượng   | Đổi Multer LIMIT_FILE_SIZE thành 413   | Gửi MulterError LIMIT_FILE_SIZE vào filter           | Response 413 có mã lỗi upload an toàn |
+// | 4   | Multer error khác        | Chuẩn hóa lỗi upload thành request lỗi | Gửi MulterError không phải size limit                | Response 400 không lộ nội dung nội bộ |
+// | 5   | Exception không xác định | Ẩn chi tiết server khỏi client         | Gửi Error bất ngờ vào filter                         | Response 500 dùng message chung       |
+
 import {
     ArgumentsHost,
     BadRequestException,

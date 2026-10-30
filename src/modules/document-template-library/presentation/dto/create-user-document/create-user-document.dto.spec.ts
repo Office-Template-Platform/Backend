@@ -1,11 +1,12 @@
-// Nhóm unit test cho CreateUserDocumentDto: kiểm tra title tùy chọn, trim và giới hạn độ dài.
-// | STT | Test case        | Mục đích                         | Các bước làm                          | Kết quả mong đợi                    |
-// |-----|------------------|----------------------------------|---------------------------------------|-------------------------------------|
-// | 1   | Title có spaces | Chuẩn hóa title trước khi lưu     | Transform rồi validate                | Title được trim, không có lỗi       |
-// | 2   | Không gửi title | Hỗ trợ tên mẫu mặc định           | Transform object rỗng rồi validate    | Không có lỗi                        |
-// | 3   | Title trắng     | Chặn dữ liệu chỉ có khoảng trắng  | Trim thành rỗng rồi validate          | Lỗi minLength ở field title         |
-// | 4   | Title quá dài   | Tôn trọng giới hạn database       | Gửi 201 ký tự rồi validate            | Lỗi maxLength ở field title         |
-// | 5   | Title sai kiểu  | Không ép kiểu tùy tiện            | Gửi number rồi validate               | Lỗi isString ở field title          |
+// Nhóm unit test cho CreateUserDocumentDto: xác nhận title tùy chọn được chuẩn hóa và kiểm tra đúng kiểu/giới hạn.
+// | STT | Test case               | Mục đích                        | Các bước làm                                       | Kết quả mong đợi                         |
+// |-----|-------------------------|---------------------------------|----------------------------------------------------|------------------------------------------|
+// | 1   | Title có khoảng trắng   | Trim trước khi dùng             | Transform title có khoảng trắng đầu/cuối; validate | Title đã trim, không có validation error |
+// | 2   | Không gửi title         | Cho phép dùng tên mẫu mặc định  | Transform object rỗng; validate                    | DTO hợp lệ, title vẫn optional           |
+// | 3   | Title rỗng sau trim     | Từ chối chuỗi không có nội dung | Gửi title toàn khoảng trắng; transform/validate    | Có validation error                      |
+// | 4   | Title quá dài           | Tuân thủ giới hạn cột database  | Gửi title dài hơn 200 ký tự; validate              | Có validation error                      |
+// | 5   | Title không phải string | Không ép kiểu dữ liệu đầu vào   | Gửi title dạng number/object; validate             | Có validation error về kiểu              |
+
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateUserDocumentDto } from '@/modules/document-template-library/presentation/dto/create-user-document/create-user-document.dto';

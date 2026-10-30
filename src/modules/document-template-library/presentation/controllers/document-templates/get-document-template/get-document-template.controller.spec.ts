@@ -1,7 +1,8 @@
-// Nhóm unit test cho GetDocumentTemplateController: kiểm tra templateId được chuyển sang use case chi tiết.
-// | STT | Test case      | Mục đích                       | Các bước làm          | Kết quả mong đợi             |
-// |-----|----------------|--------------------------------|-----------------------|------------------------------|
-// | 1   | Mẫu tồn tại    | Trả metadata và version hiện hành | Gọi get với UUID     | Trả nguyên kết quả use case  |
+// Nhóm unit test cho GetDocumentTemplateController: xác nhận template ID được chuyển nguyên vẹn tới use case detail.
+// | STT | Test case   | Mục đích                          | Các bước làm                         | Kết quả mong đợi                            |
+// |-----|-------------|-----------------------------------|--------------------------------------|---------------------------------------------|
+// | 1   | Mẫu tồn tại | Trả metadata và version hiện hành | Gọi get với UUID; service trả detail | Controller trả nguyên detail và gọi đúng ID |
+
 import { GetDocumentTemplateService } from '@/modules/document-template-library/application/services/catalog/get-document-template/get-document-template.service';
 import { GetDocumentTemplateController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template/get-document-template.controller';
 

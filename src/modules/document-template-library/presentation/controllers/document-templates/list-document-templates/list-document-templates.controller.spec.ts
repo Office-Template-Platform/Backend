@@ -1,7 +1,8 @@
-// Nhóm unit test cho ListDocumentTemplatesController: kiểm tra query được chuyển nguyên vẹn sang use case.
-// | STT | Test case       | Mục đích                       | Các bước làm                    | Kết quả mong đợi                 |
-// |-----|-----------------|--------------------------------|---------------------------------|----------------------------------|
-// | 1   | Query catalog   | Giữ nguyên bộ lọc đã validate  | Gọi list với query DTO          | Use case nhận đúng DTO và result |
+// Nhóm unit test cho ListDocumentTemplatesController: xác nhận query DTO đã validate được chuyển nguyên vẹn tới service.
+// | STT | Test case     | Mục đích                                | Các bước làm                           | Kết quả mong đợi                              |
+// |-----|---------------|-----------------------------------------|----------------------------------------|-----------------------------------------------|
+// | 1   | Query catalog | Giữ nguyên toàn bộ filter và pagination | Gọi list với query DTO và service mock | Service nhận đúng DTO; controller trả kết quả |
+
 import { ListDocumentTemplatesService } from '@/modules/document-template-library/application/services/catalog/list-document-templates/list-document-templates.service';
 import { ListDocumentTemplatesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-templates/list-document-templates.controller';
 import { ListDocumentTemplatesQueryDto } from '@/modules/document-template-library/presentation/dto/list-document-templates-query/list-document-templates-query.dto';

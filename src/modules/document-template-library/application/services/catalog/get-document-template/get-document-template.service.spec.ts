@@ -1,9 +1,10 @@
-// Nhóm unit test cho GetDocumentTemplateService: kiểm tra chi tiết published, 404 và lỗi reader.
-// | STT | Test case       | Mục đích                        | Các bước làm                         | Kết quả mong đợi                       |
-// |-----|-----------------|---------------------------------|--------------------------------------|----------------------------------------|
-// | 1   | Mẫu tồn tại     | Trả metadata mẫu                 | Reader trả detail; gọi execute       | Trả đúng detail                        |
-// | 2   | Không tồn tại   | Không lộ mẫu draft/archive       | Reader trả null; gọi execute         | Ném DocumentTemplateNotFoundError     |
-// | 3   | Reader lỗi      | Không đổi lỗi persistence        | Reader reject; gọi execute           | Promise reject đúng lỗi gốc             |
+// Nhóm unit test cho GetDocumentTemplateService: xác nhận chi tiết chỉ trả mẫu đã xuất bản và giữ nguyên lỗi đọc dữ liệu.
+// | STT | Test case          | Mục đích                            | Các bước làm                          | Kết quả mong đợi                  |
+// |-----|--------------------|-------------------------------------|---------------------------------------|-----------------------------------|
+// | 1   | Mẫu đã xuất bản    | Trả detail theo template ID         | Reader trả detail; gọi execute với ID | Service trả nguyên detail         |
+// | 2   | Mẫu không khả dụng | Không làm lộ mẫu draft hoặc archive | Reader trả null; gọi execute          | Ném DocumentTemplateNotFoundError |
+// | 3   | Reader gặp lỗi     | Không đổi lỗi database thành 404    | Reader reject; gọi execute            | Lỗi gốc được truyền lên           |
+
 import { DocumentTemplateNotFoundError } from '@/modules/document-template-library/application/errors/document-template-not-found.error';
 import type { DocumentTemplateReaderContract } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { GetDocumentTemplateService } from '@/modules/document-template-library/application/services/catalog/get-document-template/get-document-template.service';

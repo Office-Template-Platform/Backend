@@ -1,7 +1,8 @@
-// Nhóm unit test cho ListDocumentTemplateCategoriesController: kiểm tra response danh mục được ủy quyền cho use case.
-// | STT | Test case   | Mục đích                         | Các bước làm              | Kết quả mong đợi               |
-// |-----|-------------|----------------------------------|---------------------------|--------------------------------|
-// | 1   | Có danh mục | Trả danh mục và số mẫu tương ứng | Gọi list                  | Trả nguyên kết quả use case    |
+// Nhóm unit test cho ListDocumentTemplateCategoriesController: xác nhận endpoint danh mục ủy quyền response cho use case.
+// | STT | Test case   | Mục đích                       | Các bước làm                        | Kết quả mong đợi                       |
+// |-----|-------------|--------------------------------|-------------------------------------|----------------------------------------|
+// | 1   | Có danh mục | Trả danh mục và template count | Gọi list; service trả category list | Controller trả nguyên kết quả use case |
+
 import { ListDocumentTemplateCategoriesService } from '@/modules/document-template-library/application/services/catalog/list-document-template-categories/list-document-template-categories.service';
 import { ListDocumentTemplateCategoriesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-template-categories/list-document-template-categories.controller';
 

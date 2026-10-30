@@ -1,9 +1,10 @@
-// Nhóm unit test cho ListDocumentTemplatesService: kiểm tra chuyển filter và giữ nguyên trang kết quả.
-// | STT | Test case         | Mục đích                         | Các bước làm                                  | Kết quả mong đợi                         |
-// |-----|-------------------|----------------------------------|-----------------------------------------------|------------------------------------------|
-// | 1   | Có mẫu            | Trả trang theo đúng filter       | Reader trả trang; gọi execute                | Trả đúng trang và gọi reader một lần     |
-// | 2   | Không có mẫu      | Giữ metadata trang rỗng          | Reader trả items rỗng; gọi execute           | Trả total 0 và totalPages 0              |
-// | 3   | Reader lỗi        | Giữ nguyên lỗi persistence       | Reader reject; gọi execute                   | Promise reject đúng lỗi gốc              |
+// Nhóm unit test cho ListDocumentTemplatesService: xác nhận filter được chuyển nguyên vẹn và metadata phân trang không bị thay đổi.
+// | STT | Test case      | Mục đích                        | Các bước làm                                | Kết quả mong đợi                    |
+// |-----|----------------|---------------------------------|---------------------------------------------|-------------------------------------|
+// | 1   | Trang có mẫu   | Trả kết quả theo filter yêu cầu | Reader trả page; gọi execute với filters    | Trả page và gọi reader đúng một lần |
+// | 2   | Trang rỗng     | Giữ metadata khi không khớp mẫu | Reader trả items=[] và total=0; gọi execute | Trả trang rỗng với totalPages=0     |
+// | 3   | Reader gặp lỗi | Không che lỗi persistence       | Reader reject; gọi execute                  | Lỗi gốc được truyền lên             |
+
 import type {
     DocumentTemplateFilters,
     DocumentTemplateReaderContract,

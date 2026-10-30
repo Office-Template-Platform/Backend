@@ -1,12 +1,13 @@
-// Nhóm unit test cho ListDocumentTemplatesQueryDto: kiểm tra default, transform query string và validation limits.
-// | STT | Test case          | Mục đích                             | Các bước làm                                | Kết quả mong đợi                      |
-// |-----|--------------------|--------------------------------------|---------------------------------------------|---------------------------------------|
-// | 1   | Query rỗng         | Dùng pagination mặc định              | Transform object rỗng; validate             | page=1, limit=12                      |
-// | 2   | Query hợp lệ       | Chuyển number/boolean và trim search   | Gửi query string; transform; validate      | Đúng kiểu và không có lỗi             |
-// | 3   | Page/limit sai     | Chặn range ngoài hợp đồng             | Gửi page=0, limit=101                       | Có lỗi ở hai field                    |
-// | 4   | Search quá dài     | Chặn chuỗi dài quá 120 ký tự           | Gửi 121 ký tự rồi validate                  | Lỗi maxLength                         |
-// | 5   | Boolean sai        | Không đoán ý nghĩa chuỗi khác true/false| Gửi featured=yes rồi validate              | Lỗi isBoolean                         |
-// | 6   | Category sai UUID  | Chặn filter không phải UUID v4         | Gửi categoryId không hợp lệ                 | Lỗi isUuid                             |
+// Nhóm unit test cho ListDocumentTemplatesQueryDto: xác nhận query string được transform và chặn tham số vượt contract catalog.
+// | STT | Test case               | Mục đích                                   | Các bước làm                                | Kết quả mong đợi                       |
+// |-----|-------------------------|--------------------------------------------|---------------------------------------------|----------------------------------------|
+// | 1   | Query rỗng              | Dùng pagination mặc định                   | Transform object rỗng; validate             | page=1 và limit=12                     |
+// | 2   | Query hợp lệ            | Chuyển số, boolean và chuẩn hóa search     | Gửi query string đầy đủ; transform/validate | Giá trị có kiểu đúng và search đã trim |
+// | 3   | Page/limit ngoài ngưỡng | Chặn trang không hợp lệ hoặc limit quá lớn | Gửi page<1, limit<1 hoặc limit>100          | Validation thất bại                    |
+// | 4   | Search quá dài          | Giới hạn search tối đa 120 ký tự           | Gửi search dài hơn 120; validate            | Validation thất bại                    |
+// | 5   | Boolean sai định dạng   | Chỉ nhận true/false                        | Gửi featured ngoài hai giá trị hợp lệ       | Validation thất bại                    |
+// | 6   | Category ID sai UUID    | Chặn filter category không đúng định dạng  | Gửi categoryId không phải UUID v4           | Validation thất bại                    |
+
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';

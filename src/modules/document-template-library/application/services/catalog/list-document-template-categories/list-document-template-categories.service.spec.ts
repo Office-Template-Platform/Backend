@@ -1,9 +1,10 @@
-// Nhóm unit test cho ListDocumentTemplateCategoriesService: kiểm tra danh mục rỗng, có dữ liệu và lỗi reader.
-// | STT | Test case        | Mục đích                         | Các bước làm                         | Kết quả mong đợi                       |
-// |-----|------------------|----------------------------------|--------------------------------------|----------------------------------------|
-// | 1   | Có danh mục      | Trả số mẫu theo từng danh mục    | Reader trả categories; gọi execute  | Trả nguyên danh sách từ reader         |
-// | 2   | Không có danh mục| Trả danh sách rỗng               | Reader trả []; gọi execute          | Trả [] và không phát sinh lỗi           |
-// | 3   | Reader lỗi       | Giữ nguyên lỗi truy vấn          | Reader reject; gọi execute          | Promise reject đúng lỗi gốc              |
+// Nhóm unit test cho ListDocumentTemplateCategoriesService: xác nhận service trả danh mục và số mẫu từ reader, đồng thời truyền nguyên lỗi.
+// | STT | Test case         | Mục đích                       | Các bước làm                         | Kết quả mong đợi                     |
+// |-----|-------------------|--------------------------------|--------------------------------------|--------------------------------------|
+// | 1   | Có danh mục       | Trả danh mục kèm số mẫu        | Reader trả các category; gọi execute | Service trả đúng danh sách và counts |
+// | 2   | Không có danh mục | Hỗ trợ catalog chưa có dữ liệu | Reader trả []; gọi execute           | Service trả []                       |
+// | 3   | Reader gặp lỗi    | Giữ nguyên lỗi đọc danh mục    | Reader reject; gọi execute           | Lỗi gốc được truyền lên              |
+
 import type { DocumentTemplateReaderContract } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { ListDocumentTemplateCategoriesService } from '@/modules/document-template-library/application/services/catalog/list-document-template-categories/list-document-template-categories.service';
 

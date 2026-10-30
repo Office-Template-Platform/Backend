@@ -1,7 +1,8 @@
-// Nhóm unit test cho GetDocumentTemplatePreviewController: kiểm tra stream ảnh và MIME được giữ nguyên.
-// | STT | Test case       | Mục đích                       | Các bước làm                         | Kết quả mong đợi                    |
-// |-----|-----------------|--------------------------------|--------------------------------------|-------------------------------------|
-// | 1   | Preview hiện hành | Stream ảnh không qua JSON     | Use case trả file; storage mở stream | StreamableFile có MIME và đúng stream |
+// Nhóm unit test cho GetDocumentTemplatePreviewController: xác nhận controller stream đúng preview mà không biến file thành JSON.
+// | STT | Test case         | Mục đích                     | Các bước làm                                   | Kết quả mong đợi                           |
+// |-----|-------------------|------------------------------|------------------------------------------------|--------------------------------------------|
+// | 1   | Preview hiện hành | Giữ MIME type khi stream ảnh | Use case trả file; storage trả readable stream | Trả StreamableFile với MIME và stream đúng |
+
 import { StreamableFile } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import type {

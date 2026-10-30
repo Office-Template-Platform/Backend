@@ -1,15 +1,15 @@
-// Nhóm unit test cho LocalDocumentFileStorage: kiểm tra copy/write/hash/stream và ranh giới path an toàn.
-// | STT | Test case              | Mục đích                              | Các bước làm                                  | Kết quả mong đợi                            |
-// |-----|------------------------|---------------------------------------|-----------------------------------------------|---------------------------------------------|
-// | 1   | Copy template hợp lệ   | Tạo bản sao output có hash            | Copy asset vào temp root                      | Nội dung giống, namespace output riêng      |
-// | 2   | Source sai contract    | Chặn file không phải asset DOCX       | Gửi provider/namespace/MIME sai               | Ném InternalServerErrorException            |
-// | 3   | Path traversal         | Không đọc ngoài asset root             | Gửi key `../../...`                           | Từ chối trước filesystem                    |
-// | 4   | Destination trùng      | Không ghi đè file đã có                | Copy hai lần cùng key                         | Lần hai lỗi, bytes ban đầu giữ nguyên        |
-// | 5   | Save DOCX              | Ghi buffer và hash chính xác           | Gọi saveEditedDocument                         | Bytes, size và SHA-256 khớp                  |
-// | 6   | Key sai đuôi           | Chỉ nhận output `.docx`                | Gọi save với `.txt`                           | Ném InternalServerErrorException            |
-// | 7   | Read stream            | Mở file đúng namespace                 | Ghi file rồi mở stream                        | Đọc lại đúng bytes                          |
-// | 8   | Namespace/provider lạ  | Fail closed khi đọc/xóa                | Gửi reference không hỗ trợ                    | Read/xóa bị từ chối                         |
-// | 9   | Xóa file thiếu         | Cleanup lặp lại an toàn                 | Xóa key đã không tồn tại                      | Hoàn tất không lỗi                          |
+// Nhóm unit test cho LocalDocumentFileStorage: kiểm tra đọc/ghi file, checksum và giới hạn truy cập vào namespace được phép.
+// | STT | Test case                   | Mục đích                               | Các bước làm                               | Kết quả mong đợi                               |
+// |-----|-----------------------------|----------------------------------------|--------------------------------------------|------------------------------------------------|
+// | 1   | Copy template hợp lệ        | Tạo output độc lập từ asset gốc        | Copy DOCX sang UUID key mới; đọc metadata  | Bytes/hash đúng và namespace là user-documents |
+// | 2   | Path traversal              | Chặn key thoát khỏi asset root         | Gửi objectKey có traversal; gọi copy       | Ném lỗi an toàn trước khi copy                 |
+// | 3   | Destination đã tồn tại      | Không ghi đè file của request khác     | Tạo sẵn file đích; gọi copy                | Từ chối overwrite và giữ bytes cũ              |
+// | 4   | Lưu DOCX đã sửa             | Ghi bytes và tính digest chính xác     | Gọi saveEditedDocument với buffer          | File mới có kích thước và SHA-256 đúng         |
+// | 5   | Output key sai loại         | Chỉ chấp nhận đuôi DOCX                | Gọi save với key không kết thúc .docx      | Ném lỗi validation                             |
+// | 6   | Mở file hợp lệ              | Stream nội dung trong namespace hỗ trợ | Tạo reference hợp lệ; gọi openReadStream   | Stream đọc đúng bytes file                     |
+// | 7   | Namespace/path không hợp lệ | Chặn đọc hoặc xóa file ngoài ranh giới | Gửi reference namespace/key không hỗ trợ   | Ném lỗi, không thao tác filesystem ngoài root  |
+// | 8   | File cần cleanup đã mất     | Làm cleanup idempotent                 | Gọi remove với file user không còn tồn tại | Hoàn tất không lỗi                             |
+
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,11 +24,12 @@ describe('LocalDocumentFileStorage', () => {
     let originalStorageRoot: string | undefined;
     const docxMimeType =
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    // Dùng asset đang được đóng gói; danh sách mẫu cũ không còn cover-letter.docx.
     const sourceFile: StoredFileReference = {
         provider: 'local',
         storageNamespace: 'document-template-assets',
-        objectKey: 'document-templates/cover-letter.docx',
-        originalFilename: 'cover-letter.docx',
+        objectKey: 'document-templates/Tờ bướm mời dự tiệc/file.docx',
+        originalFilename: 'file.docx',
         mimeType: docxMimeType,
         sizeBytes: '100',
         sha256: null,

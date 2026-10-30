@@ -1,10 +1,11 @@
-// Nhóm unit test cho seed database: kiểm tra reset chỉ chạy trên local development và giữ migration.
-// | STT | Test case                 | Mục đích                         | Các bước làm                        | Kết quả mong đợi                              |
-// |-----|---------------------------|----------------------------------|-------------------------------------|-----------------------------------------------|
-// | 1   | Host local, development   | Cho phép reset môi trường an toàn| Truyền NODE_ENV và DB_HOST hợp lệ   | Không ném lỗi                                 |
-// | 2   | Host từ xa                | Chặn xóa nhầm database dùng chung| Truyền host không phải loopback     | Ném lỗi bảo vệ                                |
-// | 3   | Môi trường production     | Chặn reset production            | Truyền NODE_ENV production         | Ném lỗi bảo vệ                                |
-// | 4   | Reset bảng nghiệp vụ      | Xóa dữ liệu nhưng giữ migration  | Gọi helper với query mock          | TRUNCATE đúng sáu bảng, không gồm bảng migration |
+// Nhóm unit test cho seed database: xác nhận reset chỉ chạy trên PostgreSQL local ở development và chỉ xóa dữ liệu nghiệp vụ.
+// | STT | Test case                  | Mục đích                               | Các bước làm                                                           | Kết quả mong đợi                          |
+// |-----|----------------------------|----------------------------------------|------------------------------------------------------------------------|-------------------------------------------|
+// | 1   | Development và localhost   | Cho phép reset an toàn                 | NODE_ENV=development, DB_HOST=localhost; gọi assertLocalResetIsAllowed | Không ném lỗi                             |
+// | 2   | Database từ xa             | Ngăn xóa nhầm database dùng chung      | DB_HOST là hostname bên ngoài; gọi guard reset                         | Ném lỗi bảo vệ trước khi kết nối          |
+// | 3   | Ngoài development          | Chặn reset ở môi trường khác           | NODE_ENV=production, DB_HOST=localhost; gọi guard reset                | Ném lỗi bảo vệ                            |
+// | 4   | Truncate dữ liệu nghiệp vụ | Giữ nguyên schema và lịch sử migration | Gọi resetApplicationData với EntityManager giả                         | Chạy một TRUNCATE đúng sáu bảng nghiệp vụ |
+
 import type { EntityManager } from 'typeorm';
 import {
     assertLocalResetIsAllowed,

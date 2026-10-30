@@ -1,10 +1,11 @@
-// Nhóm unit test cho ResponseEnvelopeInterceptor: kiểm tra JSON envelope, metadata request và binary passthrough.
-// | STT | Test case          | Mục đích                          | Các bước làm                          | Kết quả mong đợi                         |
-// |-----|--------------------|-----------------------------------|---------------------------------------|------------------------------------------|
-// | 1   | JSON thành công    | Bọc data và request metadata       | Handler trả object                    | success/data/meta đúng                    |
-// | 2   | Giá trị nullish    | Chuẩn hóa kết quả rỗng             | Handler trả undefined                 | data là null                              |
-// | 3   | StreamableFile     | Giữ nguyên response nhị phân       | Handler trả cùng StreamableFile       | Trả cùng instance, không có envelope       |
-// | 4   | Handler lỗi        | Để exception đi tới filter         | Handler observable reject             | Promise reject cùng lỗi gốc               |
+// Nhóm unit test cho ResponseEnvelopeInterceptor: xác nhận response JSON được bọc envelope, còn binary và lỗi giữ đúng luồng xử lý.
+// | STT | Test case             | Mục đích                        | Các bước làm                                 | Kết quả mong đợi                                 |
+// |-----|-----------------------|---------------------------------|----------------------------------------------|--------------------------------------------------|
+// | 1   | JSON thành công       | Thêm data và metadata request   | Handler trả object; chạy interceptor         | Có success=true, data, timestamp, path và method |
+// | 2   | Handler trả undefined | Chuẩn hóa giá trị rỗng          | Handler trả undefined; chạy interceptor      | Envelope có data=null                            |
+// | 3   | StreamableFile        | Giữ nguyên response nhị phân    | Handler trả StreamableFile; chạy interceptor | Trả đúng instance, không bọc JSON                |
+// | 4   | Handler ném lỗi       | Chuyển lỗi tới exception filter | Handler phát lỗi; chạy interceptor           | Observable vẫn phát lại lỗi gốc                  |
+
 import { CallHandler, ExecutionContext, StreamableFile } from '@nestjs/common';
 import { firstValueFrom, lastValueFrom, of, throwError } from 'rxjs';
 import type { Request } from 'express';

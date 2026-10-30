@@ -1,9 +1,10 @@
-// Nhóm unit test cho GetDocumentTemplatePreviewService: kiểm tra file reference, thiếu preview và lỗi reader.
-// | STT | Test case       | Mục đích                            | Các bước làm                        | Kết quả mong đợi                        |
-// |-----|-----------------|-------------------------------------|-------------------------------------|-----------------------------------------|
-// | 1   | Có preview      | Cấp metadata để controller stream   | Reader trả file; gọi execute        | Trả object chứa đúng file reference     |
-// | 2   | Thiếu preview   | Trả 404 cho thumbnail không có       | Reader trả null; gọi execute        | Ném DocumentTemplatePreviewNotFoundError|
-// | 3   | Reader lỗi      | Không đổi lỗi truy vấn               | Reader reject; gọi execute          | Promise reject đúng lỗi gốc              |
+// Nhóm unit test cho GetDocumentTemplatePreviewService: xác nhận preview dùng file của phiên bản hiện hành và phân biệt not-found với lỗi reader.
+// | STT | Test case       | Mục đích                                | Các bước làm                           | Kết quả mong đợi                         |
+// |-----|-----------------|-----------------------------------------|----------------------------------------|------------------------------------------|
+// | 1   | Preview tồn tại | Cấp reference ảnh cho controller stream | Reader trả file reference; gọi execute | Trả đúng reference của current preview   |
+// | 2   | Thiếu preview   | Báo không tìm thấy thumbnail            | Reader trả null; gọi execute           | Ném DocumentTemplatePreviewNotFoundError |
+// | 3   | Reader gặp lỗi  | Giữ nguyên lỗi hạ tầng                  | Reader reject; gọi execute             | Lỗi gốc được truyền lên                  |
+
 import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
 import type { DocumentTemplateReaderContract } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { DocumentTemplatePreviewNotFoundError } from '@/modules/document-template-library/application/errors/document-template-preview-not-found.error';
