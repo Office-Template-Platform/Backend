@@ -1,4 +1,4 @@
-# 1. Hệ thống và thứ tự khởi động
+# Hệ thống và thứ tự khởi động
 # Gồm PostgreSQL local, job migration/seed và API NestJS; cấu hình lấy từ api/.env.
 # PostgreSQL healthy → migration và seed thành công → API; API_HOST_PORT:PORT và DB_HOST_PORT:DB_PORT.
 # Host port chỉ bind vào 127.0.0.1; `docker compose down` giữ database và file DOCX đầu ra.
@@ -88,6 +88,10 @@ services:
             DB_NAME: ${DB_NAME:?Set DB_NAME in api/.env}
             DB_SSL: ${DB_SSL:?Set DB_SSL in api/.env}
             DB_LOGGING: ${DB_LOGGING:?Set DB_LOGGING in api/.env}
+            ONLYOFFICE_PUBLIC_URL: ${ONLYOFFICE_PUBLIC_URL:?Set ONLYOFFICE_PUBLIC_URL in api/.env}
+            ONLYOFFICE_INTERNAL_URL: http://onlyoffice
+            ONLYOFFICE_API_INTERNAL_URL: http://api:${PORT:?Set PORT in api/.env}/api
+            ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?Set ONLYOFFICE_JWT_SECRET in api/.env}
         ports:
             - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${API_HOST_PORT:?Set API_HOST_PORT in api/.env}:${PORT:?Set PORT in api/.env}'
         volumes:
@@ -95,6 +99,8 @@ services:
         depends_on:
             migrate:
                 condition: service_completed_successfully
+            onlyoffice:
+                condition: service_started
         healthcheck:
             test:
                 [
@@ -111,6 +117,37 @@ services:
         networks:
             - office-template-platform-network
 
+    onlyoffice:
+        # Service: ONLYOFFICE Docs Community; Port: ONLYOFFICE_HOST_PORT trên host → HTTP 80 trong container.
+        # Vai trò: chạy editor DOCX và cung cấp callback lưu; JWT bắt buộc cho cấu hình và request backend.
+        # Kết nối: API callback/file dùng DNS `api`; trình duyệt tải editor script qua ONLYOFFICE_PUBLIC_URL.
+        container_name: ${ONLYOFFICE_CONTAINER_NAME:?Set ONLYOFFICE_CONTAINER_NAME in api/.env}
+        image: ${ONLYOFFICE_IMAGE:?Set ONLYOFFICE_IMAGE in api/.env}
+        restart: unless-stopped
+        environment:
+            JWT_ENABLED: 'true'
+            JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?Set ONLYOFFICE_JWT_SECRET in api/.env}
+            JWT_HEADER: Authorization
+            ALLOW_PRIVATE_IP_ADDRESS: 'true'
+        ports:
+            - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${ONLYOFFICE_HOST_PORT:?Set ONLYOFFICE_HOST_PORT in api/.env}:80'
+        volumes:
+            - office-template-onlyoffice-logs:/var/log/onlyoffice
+            - office-template-onlyoffice-data:/var/www/onlyoffice/Data
+            - office-template-onlyoffice-lib:/var/lib/onlyoffice
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'curl -fsS http://localhost/healthcheck || exit 1',
+                ]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 120s
+        networks:
+            - office-template-platform-network
+
 volumes:
     office-template-api-postgres-data:
         name: ${DB_VOLUME_NAME:?Set DB_VOLUME_NAME in api/.env}
@@ -119,6 +156,12 @@ volumes:
     office-template-api-file-storage:
         name: ${FILE_STORAGE_VOLUME_NAME:?Set FILE_STORAGE_VOLUME_NAME in api/.env}
         # Giữ file DOCX người dùng tạo qua lần recreate hoặc cập nhật API container.
+    office-template-onlyoffice-logs:
+        # Lưu log Docs Server qua lần recreate để tiện xem lỗi editor/callback.
+    office-template-onlyoffice-data:
+        # Lưu certificate và dữ liệu runtime của ONLYOFFICE Docs.
+    office-template-onlyoffice-lib:
+        # Lưu dữ liệu dịch vụ Docs Server cần tồn tại khi container được cập nhật.
 
 networks:
     office-template-platform-network:
