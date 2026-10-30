@@ -24,6 +24,10 @@ import { StoredFile } from '@/database/entities/stored-file.entity';
 })
 @Index('idx_office_template_versions_source_file', ['sourceFileId'])
 @Check('chk_office_template_versions_number_positive', '"version_number" > 0')
+@Check(
+    'chk_office_template_versions_slide_count_positive',
+    '"slide_count" IS NULL OR "slide_count" > 0',
+)
 export class OfficeTemplateVersion {
     @PrimaryGeneratedColumn('uuid')
     id!: string;
@@ -41,6 +45,10 @@ export class OfficeTemplateVersion {
 
     @Column({ name: 'version_number', type: 'integer' })
     versionNumber!: number;
+
+    // Số slide thật của PPTX; null được giữ cho các version DOCX không có khái niệm slide.
+    @Column({ name: 'slide_count', type: 'integer', nullable: true })
+    slideCount!: number | null;
 
     // File nguồn bất biến của phiên bản
     @Column({ name: 'source_file_id', type: 'uuid' })
