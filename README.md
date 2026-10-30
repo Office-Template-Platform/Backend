@@ -29,9 +29,9 @@ API cho hai thư viện mẫu văn bản và mẫu trình chiếu.
 
 Office Template API cung cấp điểm truy cập HTTP cho thư viện mẫu văn bản và thư viện mẫu trình chiếu. Mỗi thư viện là một feature riêng, có controller, application service và kiểu dữ liệu metadata riêng.
 
-API cung cấp thư viện mẫu DOCX với tìm kiếm, lọc danh mục, phân trang, chi tiết và thumbnail. Người dùng có thể tạo một bản DOCX độc lập, tải xuống để chỉnh sửa và tải bản đã sửa lên để lưu; file mẫu gốc được giữ nguyên. Năm mẫu do dự án cung cấp được seed vào PostgreSQL khi chạy Compose hoặc bằng lệnh seed ở môi trường local; mỗi mẫu có file DOCX và ảnh preview WebP trong cùng thư mục.
+API cung cấp thư viện mẫu DOCX và PPTX với tìm kiếm, lọc danh mục, chi tiết và ảnh xem trước. Người dùng có thể tạo bản sao độc lập, chỉnh sửa DOCX/PPTX qua ONLYOFFICE và tải file đã lưu xuống; file mẫu gốc luôn được giữ nguyên. Seed đăng ký metadata và checksum của các asset trong PostgreSQL; bytes của DOCX/PPTX cùng ảnh WebP/PNG nằm trong thư mục assets.
 
-Các response JSON dùng envelope `{ success, data, meta }`; lỗi dùng `{ success, error, meta }`. Endpoint stream ảnh và DOCX giữ nguyên nội dung nhị phân để trình duyệt hiển thị hoặc tải file.
+Các response JSON dùng envelope `{ success, data, meta }`; lỗi dùng `{ success, error, meta }`. Endpoint stream ảnh và file Office giữ nguyên nội dung nhị phân để trình duyệt hiển thị hoặc tải file.
 
 > [!IMPORTANT]
 > API đọc cấu hình từ `api/.env`. `npm ci` tải package từ npm; `npm run build` tạo `dist/`. Docker Compose bind API và PostgreSQL vào loopback của máy, không mở các cổng này ra mạng LAN.
@@ -56,17 +56,17 @@ if (-not (Test-Path .env)) {
 
 docker compose up -d postgres
 npm run migration:run:dev
-npm run seed:document-templates:dev
+npm run seed:office-templates:dev
 npm run dev
 ```
 
-Để làm mới toàn bộ dữ liệu nghiệp vụ của PostgreSQL local rồi nạp lại 5 mẫu demo, chạy lệnh riêng:
+Để làm mới toàn bộ dữ liệu nghiệp vụ của PostgreSQL local rồi nạp lại các mẫu DOCX/PPTX, chạy lệnh riêng:
 
 ```powershell
 npm run database:reset-and-seed:dev
 ```
 
-Lệnh này chỉ chấp nhận `NODE_ENV=development` và `DB_HOST=localhost` hoặc loopback. Nó xóa dữ liệu trong sáu bảng nghiệp vụ hiện có, bao gồm tài liệu người dùng và preview trình chiếu, rồi seed lại mẫu DOCX trong cùng transaction. Schema và bảng lịch sử migration được giữ nguyên. Không chạy lệnh này trên database dùng chung hoặc production.
+Lệnh này chỉ chấp nhận `NODE_ENV=development` và `DB_HOST=localhost` hoặc loopback. Nó xóa dữ liệu trong sáu bảng nghiệp vụ hiện có, bao gồm tài liệu người dùng và preview trình chiếu, rồi seed lại catalog DOCX/PPTX trong cùng transaction. Schema và bảng lịch sử migration được giữ nguyên. Không chạy lệnh này trên database dùng chung hoặc production.
 
 Nếu `.env` đã tồn tại, hãy bổ sung các biến Docker Compose và `DB_*` còn thiếu từ `.env.example`; giữ nguyên các giá trị cấu hình khác.
 
@@ -98,7 +98,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Compose khởi động PostgreSQL 17, đợi health check thành công, chạy migration và seed 5 mẫu DOCX, rồi mới mở API. PostgreSQL lưu dữ liệu trong volume `office-template-api-postgres-data`; file DOCX người dùng tạo nằm trong volume `office-template-api-files`. Cổng host mặc định là `5432`. API chạy tại `http://localhost:3001` và Swagger tại `http://localhost:3001/api/docs`.
+Compose khởi động PostgreSQL 17, đợi health check thành công, chạy migration và seed catalog DOCX/PPTX, rồi mới mở API. PostgreSQL lưu dữ liệu trong volume `office-template-api-postgres-data`; file người dùng tạo nằm trong volume `office-template-api-files`. Cổng host mặc định là `5432`. API chạy tại `http://localhost:3001` và Swagger tại `http://localhost:3001/api/docs`.
 
 ```powershell
 docker compose logs -f api
@@ -112,7 +112,7 @@ Nếu máy đã dùng cổng `5432` hoặc `3001`, đổi `DB_HOST_PORT` hoặc 
 ```powershell
 docker compose up -d postgres
 npm run migration:run:dev
-npm run seed:document-templates:dev
+npm run seed:office-templates:dev
 npm run dev
 ```
 
@@ -120,26 +120,32 @@ npm run dev
 
 Base URL mặc định: `http://localhost:3001/api`
 
-| Phương thức | Đường dẫn                                   | Mô tả                                          |
-| ----------- | ------------------------------------------- | ---------------------------------------------- |
-| `GET`       | `/health`                                   | Kiểm tra tiến trình API                        |
-| `GET`       | `/document-templates`                       | Tìm kiếm, lọc và phân trang mẫu DOCX           |
-| `GET`       | `/document-templates/categories`            | Danh mục và số mẫu đã xuất bản                 |
-| `GET`       | `/document-templates/:templateId`           | Chi tiết mẫu và phiên bản hiện hành            |
-| `GET`       | `/document-templates/:templateId/preview`   | Stream ảnh thumbnail                           |
-| `POST`      | `/document-templates/:templateId/documents` | Tạo bản DOCX riêng từ mẫu                      |
-| `GET`       | `/user-documents`                           | Liệt kê tài liệu của workspace hiện tại        |
-| `GET`       | `/user-documents/:documentId`               | Xem trạng thái và metadata tài liệu đã tạo     |
-| `GET`       | `/user-documents/:documentId/editor-config` | Lấy cấu hình mở lại tài liệu trong ONLYOFFICE  |
-| `PUT`       | `/user-documents/:documentId/content`       | Lưu DOCX đã chỉnh sửa (multipart field `file`) |
-| `GET`       | `/user-documents/:documentId/download`      | Tải DOCX đầu ra                                |
-| `GET`       | `/presentation-templates`                   | Liệt kê metadata mẫu trình chiếu               |
+| Phương thức | Đường dẫn                                                         | Mô tả                                                |
+| ----------- | ----------------------------------------------------------------- | ---------------------------------------------------- |
+| `GET`       | `/health`                                                         | Kiểm tra tiến trình API                              |
+| `GET`       | `/document-templates`                                             | Tìm kiếm, lọc và phân trang mẫu DOCX                 |
+| `GET`       | `/document-templates/categories`                                  | Danh mục và số mẫu đã xuất bản                       |
+| `GET`       | `/document-templates/:templateId`                                 | Chi tiết mẫu và phiên bản hiện hành                  |
+| `GET`       | `/document-templates/:templateId/preview`                         | Stream ảnh thumbnail                                 |
+| `POST`      | `/document-templates/:templateId/documents`                       | Tạo bản DOCX riêng từ mẫu                            |
+| `GET`       | `/user-documents`                                                 | Liệt kê tài liệu của workspace hiện tại              |
+| `GET`       | `/user-documents/:documentId`                                     | Xem trạng thái và metadata tài liệu đã tạo           |
+| `GET`       | `/user-documents/:documentId/editor-config`                       | Lấy cấu hình mở lại tài liệu Office trong ONLYOFFICE |
+| `PUT`       | `/user-documents/:documentId/content`                             | Lưu DOCX/PPTX đã chỉnh sửa (multipart field `file`)  |
+| `GET`       | `/user-documents/:documentId/download`                            | Tải DOCX/PPTX đầu ra                                 |
+| `DELETE`    | `/user-documents/:documentId`                                     | Xóa tài liệu trong workspace hiện tại                |
+| `GET`       | `/presentation-templates`                                         | Liệt kê metadata mẫu trình chiếu                     |
+| `GET`       | `/presentation-templates/categories`                              | Danh mục và số mẫu trình chiếu                       |
+| `GET`       | `/presentation-templates/:templateId`                             | Chi tiết mẫu và các slide có ảnh preview             |
+| `GET`       | `/presentation-templates/:templateId/preview`                     | Stream ảnh thumbnail bộ PPTX                         |
+| `GET`       | `/presentation-templates/:templateId/slides/:slideNumber/preview` | Stream ảnh preview của một slide                     |
+| `POST`      | `/presentation-templates/:templateId/documents`                   | Tạo bản PPTX riêng trong workspace                   |
 
-`GET /document-templates` nhận `page` (mặc định `1`), `limit` (mặc định `12`, tối đa `100`), `search`, `categoryId` và `featured`. Ví dụ: `GET /api/document-templates?search=bao-cao&categoryId=<uuid>&page=1&limit=12`.
+`GET /document-templates` nhận `page` (mặc định `1`), `limit` (mặc định `12`, tối đa `100`), `search`, `categoryId` và `featured`. `GET /presentation-templates` nhận `search` và `categoryId`, đồng thời giữ response dạng mảng tương thích catalog hiện tại. Ví dụ: `GET /api/document-templates?search=bao-cao&categoryId=<uuid>&page=1&limit=12`.
 
 ### Tài liệu theo thiết bị khi chưa có đăng nhập
 
-API cấp cookie `office_template_workspace` dạng `HttpOnly` cho hồ sơ trình duyệt ở lần đầu gọi API tạo hoặc đọc tài liệu. PostgreSQL chỉ lưu SHA-256 của token; API gắn mỗi tài liệu mới với workspace đó và lọc danh sách, metadata, tải xuống, cấu hình editor và upload theo cùng owner. `GET /user-documents` nhận `page` (mặc định `1`), `limit` (mặc định `12`, tối đa `100`) và `search`; danh sách sắp theo `updatedAt` giảm dần để mở lại tài liệu vừa chỉnh.
+API cấp cookie `office_template_workspace` dạng `HttpOnly` cho hồ sơ trình duyệt ở lần đầu gọi API tạo hoặc đọc tài liệu. PostgreSQL chỉ lưu SHA-256 của token; API gắn mỗi tài liệu mới với workspace đó và giới hạn danh sách, metadata, tải xuống, cấu hình editor, upload và xóa theo cùng owner. `GET /user-documents` nhận `page` (mặc định `1`), `limit` (mặc định `12`, tối đa `100`) và `search`; danh sách sắp theo `updatedAt` giảm dần để mở lại tài liệu vừa chỉnh.
 
 Để mở lại tài liệu, client lấy `id` từ danh sách rồi gọi `GET /user-documents/:documentId/editor-config`; API chỉ trả cấu hình editor khi ID thuộc workspace hiện tại. ONLYOFFICE tải revision theo URL có chữ ký và lưu bản cuối qua callback đã xác thực JWT.
 
@@ -154,7 +160,26 @@ Khi frontend và API có origin khác nhau, browser client cần gửi credentia
 | Bản tin     | Báo truyền thống                                                |
 | Bản ghi nhớ | Bản ghi nhớ có góc cạnh và đường cong; Bản ghi nhớ màu xanh lam |
 | Ứng tuyển   | Tiêu đề vui vẻ                                                  |
-| Sự kiện     | Tờ bướm mời dự tiệc                                             |
+| Sự kiện     | Tờ bướm mời dự tiệc; Phiếu quà tặng ngày lễ                     |
+| Báo cáo     | Báo cáo                                                         |
+| Kinh doanh  | Hóa đơn dịch vụ                                                 |
+| Giáo dục    | Lịch công tác Hội phụ huynh giáo viên                           |
+
+### Mẫu PPTX được seed sẵn
+
+| Bộ mẫu                              | Số slide | Danh mục          |
+| ----------------------------------- | -------: | ----------------- |
+| Bản trình bày phổ biến              |       14 | Kinh doanh        |
+| Chứng chỉ đào tạo                   |        1 | Giáo dục          |
+| Chứng nhận học bổng                 |        1 | Giáo dục          |
+| Giải thưởng nhân viên xuất sắc      |        1 | Chứng nhận        |
+| Giấy chứng nhận nhân viên của tháng |        1 | Chứng nhận        |
+| Sách nhỏ quảng cáo màu vàng         |        4 | Kinh doanh        |
+| Sơ đồ tổ chức đơn giản              |        1 | Sơ đồ & tổ chức   |
+| Thiết kế giọt nước                  |       14 | Thiết kế sáng tạo |
+| Thiết kế máy tính bảng              |        2 | Giáo dục          |
+
+Seed đồng bộ 9 bộ PPTX có đủ `file.pptx` và `preview.png`. Ảnh bìa được dùng làm thumbnail và preview slide đầu tiên; API chỉ liệt kê các slide đã có ảnh preview, còn `slideCount` là tổng số slide trong file PPTX.
 
 Các mẫu cũ được xóa khỏi catalog và metadata file nếu chưa có tài liệu tham chiếu. Mẫu nào đã được dùng để tạo tài liệu sẽ chuyển sang trạng thái lưu trữ để giữ lịch sử nguồn.
 
@@ -182,23 +207,23 @@ Ví dụ response JSON thành công của `GET /health`:
 
 Tạo `api/.env` từ `.env.example` trước khi chạy ứng dụng:
 
-| Biến                       | Mặc định                    | Mục đích                                          |
-| -------------------------- | --------------------------- | ------------------------------------------------- |
-| `PORT`                     | `3001`                      | Cổng HTTP API                                     |
-| `NODE_ENV`                 | `development`               | Môi trường chạy                                   |
-| `WEB_ORIGIN`               | `http://localhost:3000`     | Origin frontend được phép qua CORS                |
-| `FILE_STORAGE_ROOT`        | `./storage`                 | Thư mục lưu bản DOCX người dùng tạo               |
-| `FILE_STORAGE_ROOT_DOCKER` | `/app/storage`              | Đường dẫn lưu DOCX bên trong API container        |
-| `DB_HOST`                  | `localhost`                 | Host PostgreSQL khi API chạy trên máy             |
-| `DB_PORT`                  | `5432`                      | Cổng PostgreSQL                                   |
-| `DB_USER`                  | `office_template`           | User PostgreSQL local                             |
-| `DB_PASSWORD`              | `office_template_local_dev` | Mật khẩu chỉ dùng cho môi trường local            |
-| `DB_NAME`                  | `office_template`           | Database local                                    |
-| `DB_SSL`                   | `false`                     | Bật SSL khi môi trường PostgreSQL yêu cầu         |
-| `DB_LOGGING`               | `false`                     | Ghi SQL query vào log khi cần debug               |
-| `DB_HOST_PORT`             | `5432`                      | Cổng máy host được Docker publish cho PostgreSQL  |
-| `API_HOST_PORT`            | `3001`                      | Cổng máy host được Docker publish cho API         |
-| `FILE_STORAGE_VOLUME_NAME` | `office-template-api-files` | Volume giữ DOCX đầu ra qua lần recreate container |
+| Biến                       | Mặc định                    | Mục đích                                         |
+| -------------------------- | --------------------------- | ------------------------------------------------ |
+| `PORT`                     | `3001`                      | Cổng HTTP API                                    |
+| `NODE_ENV`                 | `development`               | Môi trường chạy                                  |
+| `WEB_ORIGIN`               | `http://localhost:3000`     | Origin frontend được phép qua CORS               |
+| `FILE_STORAGE_ROOT`        | `./storage`                 | Thư mục lưu tài liệu DOCX/PPTX người dùng tạo    |
+| `FILE_STORAGE_ROOT_DOCKER` | `/app/storage`              | Đường dẫn lưu DOCX/PPTX bên trong API container  |
+| `DB_HOST`                  | `localhost`                 | Host PostgreSQL khi API chạy trên máy            |
+| `DB_PORT`                  | `5432`                      | Cổng PostgreSQL                                  |
+| `DB_USER`                  | `office_template`           | User PostgreSQL local                            |
+| `DB_PASSWORD`              | `office_template_local_dev` | Mật khẩu chỉ dùng cho môi trường local           |
+| `DB_NAME`                  | `office_template`           | Database local                                   |
+| `DB_SSL`                   | `false`                     | Bật SSL khi môi trường PostgreSQL yêu cầu        |
+| `DB_LOGGING`               | `false`                     | Ghi SQL query vào log khi cần debug              |
+| `DB_HOST_PORT`             | `5432`                      | Cổng máy host được Docker publish cho PostgreSQL |
+| `API_HOST_PORT`            | `3001`                      | Cổng máy host được Docker publish cho API        |
+| `FILE_STORAGE_VOLUME_NAME` | `office-template-api-files` | Volume giữ tài liệu DOCX/PPTX qua lần recreate   |
 
 Không commit `.env`; file này dành cho cấu hình của môi trường phát triển.
 
@@ -209,12 +234,13 @@ Không commit `.env`; file này dành cho cấu hình của môi trường phát
 ```text
 api/
 ├── assets/
-│   └── document-templates/             # Mỗi thư mục chứa file.docx và preview.webp
-│       ├── Báo truyền thống/
-│       ├── Bản ghi nhớ có góc cạnh và đường cong/
-│       ├── Bản ghi nhờ màu xanh lam/
-│       ├── Tiêu đề vui vẻ/
-│       └── Tờ bướm mời dự tiệc/
+│   ├── document-templates/             # Mỗi thư mục chứa file.docx và preview.webp
+│   │   ├── Báo truyền thống/
+│   │   ├── Bản ghi nhớ có góc cạnh và đường cong/
+│   │   ├── Bản ghi nhờ màu xanh lam/
+│   │   ├── Tiêu đề vui vẻ/
+│   │   └── Tờ bướm mời dự tiệc/
+│   └── presentation-templates/         # Mỗi thư mục chứa file.pptx và preview.png
 ├── src/
 │   ├── bootstrap/
 │   │   └── api/
@@ -233,8 +259,8 @@ api/
 │   │   │   ├── data-source.ts
 │   │   │   └── database.options.ts
 │   │   ├── seeds/
-│   │   │   ├── document-template-samples.seed.ts
-│   │   │   └── document-template-samples.seed.spec.ts
+│   │   │   ├── office-template-samples.seed.ts
+│   │   │   └── office-template-samples.seed.spec.ts
 │   │   ├── entities/
 │   │   │   ├── anonymous-workspace.entity.ts
 │   │   │   ├── office-template.entity.ts
@@ -245,7 +271,8 @@ api/
 │   │   │   └── user-document.entity.ts
 │   │   ├── migrations/
 │   │   │   ├── 1793376000000-create-office-template-schema.ts
-│   │   │   └── 1793380800000-add-anonymous-document-workspaces.ts
+│   │   │   ├── 1793380800000-add-anonymous-document-workspaces.ts
+│   │   │   └── 1793384400000-add-presentation-slide-count.ts
 │   │   └── enums/office-template.enums.ts
 │   └── modules/
 │       ├── health/
@@ -257,7 +284,7 @@ api/
 │       │   │   ├── errors/                 # Lỗi nghiệp vụ có HTTP status ổn định
 │       │   │   ├── services/
 │       │   │   │   ├── catalog/            # List/detail/preview, mỗi use case có folder riêng
-│       │   │   │   ├── user-documents/     # Create/list/read/download/save, mỗi use case có folder riêng
+│       │   │   │   ├── user-documents/     # Create/list/read/download/save/delete, mỗi use case có folder riêng
 │       │   │   │   └── workspaces/         # Cấp và xác thực danh tính ẩn danh
 │       │   │   ├── types/                  # Kiểu response nội bộ application
 │       │   │   └── utils/                  # Projection metadata không lộ storage key
@@ -268,7 +295,7 @@ api/
 │       │   │   │   │   ├── document-templates/ # Đọc catalog mẫu DOCX
 │       │   │   │   │   └── user-documents/     # Đọc tài liệu người dùng
 │       │   │   │   ├── workspaces/         # TypeORM adapter lưu token hash
-│       │   │   │   └── write/              # Transaction tạo/thay file user document
+│       │   │   │   └── write/user-documents/ # Transaction ghi và xóa tài liệu theo workflow
 │       │   │   └── storage/local-document-file-storage.ts
 │       │   ├── presentation/
 │       │   │   ├── controllers/
@@ -282,16 +309,24 @@ api/
 │       │   │   │       ├── get-user-document/                # GET /user-documents/:documentId
 │       │   │   │       ├── list-user-documents/               # GET /user-documents
 │       │   │   │       ├── save-user-document-content/      # PUT /user-documents/:documentId/content
-│       │   │   │       └── download-user-document/          # GET /user-documents/:documentId/download
+│       │   │   │       ├── download-user-document/          # GET /user-documents/:documentId/download
+│       │   │   │       ├── delete-user-document/            # DELETE /user-documents/:documentId
+│       │   │   │       └── onlyoffice/                      # Editor file và callback
 │       │   │   ├── dto/                    # Validation cho request HTTP
 │       │   │   ├── guards/                 # Nhận diện anonymous workspace từ HttpOnly cookie
-│       │   │   └── types/uploaded-docx-file.ts
+│       │   │   └── types/uploaded-office-document-file.ts
 │       │   └── document-template-library.module.ts
 │       └── presentation-template-library/
 │           ├── application/
-│           │   ├── services/list-presentation-templates.service.ts
-│           │   └── types/presentation-template-summary.ts
-│           ├── presentation/controllers/presentation-templates.controller.ts
+│           │   ├── contracts/presentation-template-reader.contract.ts
+│           │   ├── errors/
+│           │   ├── services/catalog/              # Mỗi API đọc catalog có use case riêng
+│           │   ├── services/user-presentations/   # Tạo bản PPTX riêng
+│           │   └── types/                         # Read model và preview metadata
+│           ├── infrastructure/repositories/read/presentation-templates/
+│           ├── presentation/
+│           │   ├── controllers/presentation-templates/ # Một controller cho mỗi API
+│           │   └── dto/
 │           └── presentation-template-library.module.ts
 ├── test/
 │   └── jest-e2e.json
@@ -304,7 +339,7 @@ api/
 └── tsconfig.json
 ```
 
-`bootstrap/api` giữ composition root, factory cấu hình Nest và entry point của process. `src/http` chứa filter và interceptor dùng chung toàn API; `create-api-app.ts` đăng ký chúng vào request lifecycle, còn mỗi spec nằm cạnh implementation. Trong feature DOCX, controller/DTO thuộc `presentation`; contract, lỗi và use case thuộc `application`; TypeORM read/write repository cùng local file storage thuộc `infrastructure`. Mỗi use case nằm trong folder riêng cạnh spec của nó. Asset nguồn bất biến nằm trong `assets/`; file đầu ra được lưu riêng ở `FILE_STORAGE_ROOT`. Migration đầu tiên tạo sáu bảng catalog; migration tiếp theo bổ sung workspace ẩn danh và gắn owner vào tài liệu người dùng.
+`bootstrap/api` giữ composition root, factory cấu hình Nest và entry point của process. `src/http` chứa filter và interceptor dùng chung toàn API; `create-api-app.ts` đăng ký chúng vào request lifecycle, còn mỗi spec nằm cạnh implementation. Ở hai feature DOCX và PPTX, controller/DTO thuộc `presentation`; contract, lỗi và use case thuộc `application`; TypeORM read repository thuộc `infrastructure`. Feature DOCX giữ thêm các adapter ghi tài liệu và storage dùng chung. Mỗi use case nằm trong folder riêng cạnh spec của nó. Asset nguồn bất biến nằm trong `assets/`; file đầu ra được lưu riêng ở `FILE_STORAGE_ROOT`. Các migration lần lượt tạo catalog, bổ sung workspace ẩn danh và trường số slide của phiên bản trình chiếu.
 
 Mỗi file Jest mở đầu bằng bảng test case tiếng Việt, sau đó từng test ghi rõ bước Arrange, Act và Assert. Test service mock contract; test TypeORM repository mock query builder/transaction manager; test storage dùng thư mục tạm để kiểm tra bytes và path boundary.
 
@@ -348,6 +383,7 @@ classDiagram
         id: UUID PK
         template_id: UUID FK
         version_number: INTEGER, positive
+        slide_count: INTEGER, nullable, positive
         source_file_id: UUID FK
         thumbnail_file_id: UUID FK, nullable
         is_current: BOOLEAN, default false
@@ -420,40 +456,41 @@ Mỗi khối là một bảng; field được viết theo dạng `tên_field: ki
 
 ## Tính năng và trạng thái
 
-| Hạng mục                                                | Trạng thái                                  |
-| ------------------------------------------------------- | ------------------------------------------- |
-| NestJS bootstrap, CORS, validation và Swagger           | Đã triển khai                               |
-| Health check                                            | Đã triển khai                               |
-| Thư viện mẫu DOCX: tìm kiếm, lọc, phân trang và preview | Đã triển khai, có 5 mẫu                     |
-| Tạo bản DOCX riêng và tải xuống                         | Đã triển khai                               |
-| Workspace ẩn danh, giới hạn tài liệu theo trình duyệt   | Đã triển khai phía API                      |
-| Danh sách tài liệu và mở lại tài liệu đã lưu            | Đã triển khai phía API                      |
-| Lưu DOCX qua callback ONLYOFFICE                        | Có luồng; cần xác nhận cấu hình Docs Server |
-| Response envelope thành công và lỗi                     | Đã triển khai toàn API                      |
-| Endpoint danh mục mẫu trình chiếu                       | Có route, chưa có dữ liệu                   |
-| Entity TypeORM cho mô hình dữ liệu                      | Đã triển khai                               |
-| Kết nối PostgreSQL và migration                         | Đã triển khai                               |
-| Chỉnh sửa nội dung bằng editor nhúng                    | Đã tích hợp; cần Docs Server hoạt động đúng |
-| Tạo bản sao và tải xuống PPTX                           | Chưa triển khai                             |
+| Hạng mục                                                 | Trạng thái                                  |
+| -------------------------------------------------------- | ------------------------------------------- |
+| NestJS bootstrap, CORS, validation và Swagger            | Đã triển khai                               |
+| Health check                                             | Đã triển khai                               |
+| Thư viện mẫu DOCX: tìm kiếm, lọc, phân trang và preview  | Đã triển khai                               |
+| Tạo bản DOCX riêng và tải xuống                          | Đã triển khai                               |
+| Workspace ẩn danh, giới hạn tài liệu theo trình duyệt    | Đã triển khai phía API                      |
+| Danh sách tài liệu và mở lại tài liệu đã lưu             | Đã triển khai phía API                      |
+| Lưu DOCX/PPTX qua callback ONLYOFFICE                    | Có luồng; cần xác nhận cấu hình Docs Server |
+| Response envelope thành công và lỗi                      | Đã triển khai toàn API                      |
+| Entity TypeORM cho mô hình dữ liệu                       | Đã triển khai                               |
+| Kết nối PostgreSQL và migration                          | Đã triển khai                               |
+| Chỉnh sửa nội dung bằng editor nhúng                     | Đã tích hợp; cần Docs Server hoạt động đúng |
+| Thư viện mẫu PPTX: tìm kiếm, danh mục, detail và preview | Đã triển khai, có 9 bộ mẫu                  |
+| Tạo, chỉnh sửa và tải bản PPTX độc lập                   | Đã triển khai qua workspace thiết bị        |
+| Xóa tài liệu theo workspace                              | Đã triển khai                               |
 
-ONLYOFFICE callback thay bản DOCX hiện hành sau khi nhận callback lưu cuối `status: 2`; API cũng có `PUT /user-documents/:documentId/content` cho luồng upload trực tiếp. Bản cũ bị thay thế nên API hiện mở lại bản đã lưu gần nhất, chưa giữ lịch sử phiên bản. Người dùng chưa có tài khoản; cookie workspace giới hạn dữ liệu theo hồ sơ trình duyệt và không đồng bộ giữa máy.
+ONLYOFFICE callback thay bản DOCX/PPTX hiện hành sau khi nhận callback lưu cuối `status: 2`; API cũng có `PUT /user-documents/:documentId/content` cho luồng upload trực tiếp. Bản cũ bị thay thế nên API hiện mở lại bản đã lưu gần nhất, chưa giữ lịch sử phiên bản. Người dùng chưa có tài khoản; cookie workspace giới hạn dữ liệu theo hồ sơ trình duyệt và không đồng bộ giữa máy.
 
 ## Lệnh phát triển
 
 Chạy trong thư mục `api`:
 
-| Lệnh                                  | Mục đích                                              |
-| ------------------------------------- | ----------------------------------------------------- |
-| `npm run dev`                         | Chạy NestJS ở chế độ watch                            |
-| `npm run build`                       | Build API và viết lại alias cho runtime               |
-| `npm run start:prod`                  | Chạy ứng dụng đã build trong `dist/`                  |
-| `npm run migration:show:dev`          | Xem migration đã áp dụng và còn chờ                   |
-| `npm run seed:document-templates:dev` | Seed 5 mẫu DOCX và dọn bộ demo cũ một cách idempotent |
-| `npm run database:reset-and-seed:dev` | Xóa dữ liệu nghiệp vụ local rồi seed lại 5 mẫu demo   |
-| `npm run migration:run:dev`           | Áp dụng migration lên PostgreSQL local                |
-| `npm run migration:revert:dev`        | Hoàn tác migration mới nhất                           |
-| `npm run type-check`                  | Kiểm tra kiểu TypeScript                              |
-| `npm run lint`                        | Kiểm tra source bằng ESLint                           |
+| Lệnh                                  | Mục đích                                             |
+| ------------------------------------- | ---------------------------------------------------- |
+| `npm run dev`                         | Chạy NestJS ở chế độ watch                           |
+| `npm run build`                       | Build API và viết lại alias cho runtime              |
+| `npm run start:prod`                  | Chạy ứng dụng đã build trong `dist/`                 |
+| `npm run migration:show:dev`          | Xem migration đã áp dụng và còn chờ                  |
+| `npm run seed:office-templates:dev`   | Seed catalog DOCX/PPTX theo cách idempotent          |
+| `npm run database:reset-and-seed:dev` | Xóa dữ liệu nghiệp vụ local rồi seed lại hai catalog |
+| `npm run migration:run:dev`           | Áp dụng migration lên PostgreSQL local               |
+| `npm run migration:revert:dev`        | Hoàn tác migration mới nhất                          |
+| `npm run type-check`                  | Kiểm tra kiểu TypeScript                             |
+| `npm run lint`                        | Kiểm tra source bằng ESLint                          |
 
 Tạo migration mới sau khi sửa entity bằng lệnh:
 
