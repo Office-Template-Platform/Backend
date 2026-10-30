@@ -29,7 +29,7 @@ export class UserDocument {
     @PrimaryGeneratedColumn('uuid')
     id!: string;
 
-    // Phiên bản của PPTX gốc, để khớp chính xác bộ slide.
+    // Phiên bản template nguồn được ghim để tài liệu DOCX/PPTX có thể truy nguyên mẫu ban đầu.
     @Column({ name: 'source_template_version_id', type: 'uuid' })
     sourceTemplateVersionId!: string;
 
@@ -54,7 +54,7 @@ export class UserDocument {
     })
     status!: UserDocumentStatus;
 
-    // File kết xuất cuối cùng, được tạo ra từ PPTX gốc và dữ liệu người dùng.
+    // File đầu ra độc lập do người dùng tạo hoặc cập nhật từ nội dung template.
     @Column({ name: 'output_file_id', type: 'uuid', nullable: true })
     outputFileId!: string | null;
 
