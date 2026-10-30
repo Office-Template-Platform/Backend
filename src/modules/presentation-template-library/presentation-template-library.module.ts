@@ -14,6 +14,9 @@ import { GetPresentationTemplatePreviewService } from '@/modules/presentation-te
 import { GetPresentationTemplatePreviewController } from '@/modules/presentation-template-library/presentation/controllers/presentation-templates/get-presentation-template-preview/get-presentation-template-preview.controller';
 import { GetPresentationSlidePreviewService } from '@/modules/presentation-template-library/application/services/catalog/get-presentation-slide-preview/get-presentation-slide-preview.service';
 import { GetPresentationSlidePreviewController } from '@/modules/presentation-template-library/presentation/controllers/presentation-templates/get-presentation-slide-preview/get-presentation-slide-preview.controller';
+import { CreateUserPresentationService } from '@/modules/presentation-template-library/application/services/user-presentations/create-user-presentation/create-user-presentation.service';
+import { CreateUserPresentationController } from '@/modules/presentation-template-library/presentation/controllers/presentation-templates/create-user-presentation/create-user-presentation.controller';
+import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/presentation/guards/anonymous-workspace.guard';
 import { TypeOrmPresentationTemplateReaderRepository } from '@/modules/presentation-template-library/infrastructure/repositories/read/presentation-templates/typeorm-presentation-template-reader.repository';
 import { DocumentTemplateLibraryModule } from '@/modules/document-template-library/document-template-library.module';
 
@@ -28,6 +31,7 @@ import { DocumentTemplateLibraryModule } from '@/modules/document-template-libra
         GetPresentationTemplateController,
         GetPresentationTemplatePreviewController,
         GetPresentationSlidePreviewController,
+        CreateUserPresentationController,
     ],
     providers: [
         ListPresentationTemplatesService,
@@ -35,6 +39,8 @@ import { DocumentTemplateLibraryModule } from '@/modules/document-template-libra
         GetPresentationTemplateService,
         GetPresentationTemplatePreviewService,
         GetPresentationSlidePreviewService,
+        CreateUserPresentationService,
+        AnonymousWorkspaceGuard,
         TypeOrmPresentationTemplateReaderRepository,
         {
             provide: PRESENTATION_TEMPLATE_READER,

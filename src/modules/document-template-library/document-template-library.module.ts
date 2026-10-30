@@ -104,6 +104,10 @@ import { AnonymousWorkspaceGuard } from '@/modules/document-template-library/pre
             useExisting: LocalDocumentFileStorage,
         },
     ],
-    exports: [DOCUMENT_FILE_STORAGE],
+    exports: [
+        DOCUMENT_FILE_STORAGE,
+        USER_DOCUMENT_WRITER,
+        AnonymousWorkspaceService,
+    ],
 })
 export class DocumentTemplateLibraryModule {}
