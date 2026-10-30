@@ -10,33 +10,40 @@ import { ListDocumentTemplateCategoriesService } from '@/modules/document-templa
 import { GetDocumentTemplateService } from '@/modules/document-template-library/application/services/catalog/get-document-template/get-document-template.service';
 import { GetDocumentTemplatePreviewService } from '@/modules/document-template-library/application/services/catalog/get-document-template-preview/get-document-template-preview.service';
 import { CreateUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/create-user-document/create-user-document.service';
+import { GetUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/get-user-document/get-user-document.service';
 import { ListDocumentTemplatesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-templates/list-document-templates.controller';
 import { ListDocumentTemplateCategoriesController } from '@/modules/document-template-library/presentation/controllers/document-templates/list-document-template-categories/list-document-template-categories.controller';
 import { GetDocumentTemplateController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template/get-document-template.controller';
 import { GetDocumentTemplatePreviewController } from '@/modules/document-template-library/presentation/controllers/document-templates/get-document-template-preview/get-document-template-preview.controller';
 import { CreateUserDocumentController } from '@/modules/document-template-library/presentation/controllers/document-templates/create-user-document/create-user-document.controller';
+import { GetUserDocumentController } from '@/modules/document-template-library/presentation/controllers/user-documents/get-user-document/get-user-document.controller';
 import { DOCUMENT_TEMPLATE_READER } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { TypeOrmDocumentTemplateReaderRepository } from '@/modules/document-template-library/infrastructure/repositories/read/document-templates/typeorm-document-template-reader.repository';
 import { DOCUMENT_FILE_STORAGE } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
 import { LocalDocumentFileStorage } from '@/modules/document-template-library/infrastructure/storage/local-document-file-storage';
 import { USER_DOCUMENT_WRITER } from '@/modules/document-template-library/application/contracts/user-document-writer.contract';
 import { TypeOrmUserDocumentWriterRepository } from '@/modules/document-template-library/infrastructure/repositories/write/typeorm-user-document-writer.repository';
+import { USER_DOCUMENT_READER } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
+import { TypeOrmUserDocumentReaderRepository } from '@/modules/document-template-library/infrastructure/repositories/read/user-documents/typeorm-user-document-reader.repository';
 
 @Module({
     imports: [TypeOrmModule.forFeature([OfficeTemplate, TemplateCategory, StoredFile, UserDocument])],
-    controllers: [ListDocumentTemplatesController, ListDocumentTemplateCategoriesController, GetDocumentTemplateController, GetDocumentTemplatePreviewController, CreateUserDocumentController],
+    controllers: [ListDocumentTemplatesController, ListDocumentTemplateCategoriesController, GetDocumentTemplateController, GetDocumentTemplatePreviewController, CreateUserDocumentController, GetUserDocumentController],
     providers: [
         ListDocumentTemplatesService,
         ListDocumentTemplateCategoriesService,
         GetDocumentTemplateService,
         GetDocumentTemplatePreviewService,
         CreateUserDocumentService,
+        GetUserDocumentService,
         TypeOrmDocumentTemplateReaderRepository,
         LocalDocumentFileStorage,
         TypeOrmUserDocumentWriterRepository,
+        TypeOrmUserDocumentReaderRepository,
         { provide: DOCUMENT_TEMPLATE_READER, useExisting: TypeOrmDocumentTemplateReaderRepository },
         { provide: DOCUMENT_FILE_STORAGE, useExisting: LocalDocumentFileStorage },
         { provide: USER_DOCUMENT_WRITER, useExisting: TypeOrmUserDocumentWriterRepository },
+        { provide: USER_DOCUMENT_READER, useExisting: TypeOrmUserDocumentReaderRepository },
     ],
 })
 export class DocumentTemplateLibraryModule {}
