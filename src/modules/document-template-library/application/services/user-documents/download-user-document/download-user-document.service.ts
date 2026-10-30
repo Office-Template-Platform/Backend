@@ -1,5 +1,10 @@
 // Use case cấp file reference nội bộ để controller tải tài liệu đã READY.
-import { Inject, Injectable } from '@nestjs/common';
+import {
+    Inject,
+    Injectable,
+    UnsupportedMediaTypeException,
+} from '@nestjs/common';
+import { getOfficeDocumentFormat } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
 import {
     USER_DOCUMENT_READER,
@@ -44,9 +49,18 @@ export class DownloadUserDocumentService {
             throw new UserDocumentNotReadyError();
         }
 
+        // MIME là nguồn sự thật cho phần mở rộng; không gắn sai .docx cho một bản PPTX.
+        const format = getOfficeDocumentFormat(document.outputFile.mimeType);
+
+        if (!format) {
+            throw new UnsupportedMediaTypeException(
+                'Định dạng tài liệu tải xuống chưa được hỗ trợ.',
+            );
+        }
+
         return {
             file: document.outputFile,
-            filename: `${document.title}.docx`,
+            filename: `${document.title}.${format.extension}`,
         };
     }
 }

@@ -6,6 +6,7 @@ import {
     type UserDocumentListQuery,
 } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
 import { toUserDocumentSummary } from '@/modules/document-template-library/application/utils/to-user-document-summary';
+import { getOfficeDocumentFormat } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
 
 @Injectable()
 // Service chỉ điều phối lọc/phân trang qua read contract và không biết TypeORM.
@@ -27,7 +28,14 @@ export class ListUserDocumentsService {
             );
 
         return {
-            items: items.map(toUserDocumentSummary),
+            // Gửi định dạng file để giao diện phân biệt DOCX và PPTX trong thư viện chung.
+            items: items.map((document) => ({
+                ...toUserDocumentSummary(document),
+                fileType: document.outputFile
+                    ? (getOfficeDocumentFormat(document.outputFile.mimeType)
+                          ?.extension ?? null)
+                    : null,
+            })),
             total,
             page: query.page,
             limit: query.limit,

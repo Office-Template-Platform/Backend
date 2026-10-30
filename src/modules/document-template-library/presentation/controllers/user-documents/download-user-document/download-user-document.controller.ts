@@ -1,4 +1,4 @@
-// HTTP endpoint stream file DOCX đầu ra dưới dạng tệp đính kèm.
+// HTTP endpoint stream file Office đầu ra dưới dạng tệp đính kèm.
 import {
     Controller,
     Get,
@@ -31,10 +31,10 @@ export class DownloadUserDocumentController {
     @Get(':documentId/download')
     @ApiOperation({
         operationId: 'UserDocumentsController_download',
-        summary: 'Tải DOCX do người dùng tạo',
+        summary: 'Tải file do người dùng tạo',
     })
     @ApiOkResponse({
-        description: 'File DOCX được stream dưới dạng attachment.',
+        description: 'File Office được stream dưới dạng attachment.',
     })
     // Header RFC 5987 giữ Unicode và khoảng trắng an toàn trong tên file.
     async download(
@@ -50,7 +50,7 @@ export class DownloadUserDocumentController {
 
         return new StreamableFile(stream, {
             type: file.mimeType,
-            disposition: `attachment; filename="document.docx"; filename*=UTF-8''${encodedFilename}`,
+            disposition: `attachment; filename="document.${filename.split('.').pop()}"; filename*=UTF-8''${encodedFilename}`,
         });
     }
 }

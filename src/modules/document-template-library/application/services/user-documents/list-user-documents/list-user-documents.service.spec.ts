@@ -67,6 +67,7 @@ describe('ListUserDocumentsService', () => {
                     createdAt: '2026-10-01T00:00:00.000Z',
                     updatedAt: '2026-10-03T00:00:00.000Z',
                     downloadUrl: '/api/user-documents/document-1/download',
+                    fileType: 'docx',
                     sourceTemplate: {
                         id: 'template-1',
                         name: 'Báo cáo',

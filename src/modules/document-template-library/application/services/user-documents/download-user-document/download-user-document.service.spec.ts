@@ -4,7 +4,10 @@
 // | 1   | Tài liệu READY     | Cấp reference và tên tải DOCX           | Reader trả record READY có output; gọi execute | Trả file reference và filename .docx |
 // | 2   | Không tìm thấy     | Báo tài liệu không tồn tại              | Reader trả null; gọi execute                   | Ném UserDocumentNotFoundError        |
 // | 3   | READY thiếu output | Chặn tải khi metadata file không đầy đủ | Reader trả READY nhưng outputFile=null         | Ném UserDocumentNotReadyError        |
+// | 4   | File PPTX          | Giữ đúng đuôi khi tải bản trình chiếu   | Reader trả READY/PPTX; gọi execute             | Trả filename có đuôi .pptx            |
+// | 5   | MIME không hỗ trợ  | Từ chối định dạng không Office          | Reader trả READY/PDF; gọi execute              | Ném UnsupportedMediaTypeException    |
 
+import { UnsupportedMediaTypeException } from '@nestjs/common';
 import type {
     UserDocumentReaderContract,
     UserDocumentRecord,
@@ -128,5 +131,66 @@ describe('DownloadUserDocumentService', () => {
         await expect(
             target.execute('document-1', 'workspace-1'),
         ).rejects.toBeInstanceOf(UserDocumentNotReadyError);
+    });
+
+    // Test 4 dùng MIME của StoredFile để tạo đúng extension cho bản presentation.
+    it('should return a PPTX filename for a ready presentation', async () => {
+        // Bước 1 - Arrange: workspace có tài liệu READY với MIME PPTX chuẩn.
+        const file = {
+            provider: 'local' as const,
+            storageNamespace: 'user-documents',
+            objectKey: 'presentations/deck.pptx',
+            originalFilename: 'Quarterly deck.pptx',
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            sizeBytes: '1024',
+            sha256: 'hash',
+        };
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue({
+            id: 'document-2',
+            title: 'Quarterly deck',
+            status: 'ready',
+            failureCode: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            downloadUrl: '/api/user-documents/document-2/download',
+            outputFile: file,
+            sourceTemplate: { id: 'template-2', name: 'Deck', version: 1 },
+        });
+
+        // Bước 2 - Act: lấy nội dung tải xuống theo document ID và workspace.
+        const result = await target.execute('document-2', 'workspace-1');
+
+        // Bước 3 - Assert: file reference được giữ và tên tải xuống kết thúc bằng .pptx.
+        expect(result).toEqual({ file, filename: 'Quarterly deck.pptx' });
+    });
+
+    // Test 5 không phát hành file có MIME lạ dưới dạng download Office.
+    it('should reject a ready file with an unsupported MIME type', async () => {
+        // Bước 1 - Arrange: reader trả file PDF dù record đang ở trạng thái READY.
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue({
+            id: 'document-3',
+            title: 'Unexpected file',
+            status: 'ready',
+            failureCode: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            downloadUrl: '/api/user-documents/document-3/download',
+            outputFile: {
+                provider: 'local',
+                storageNamespace: 'user-documents',
+                objectKey: 'documents/file.pdf',
+                originalFilename: 'file.pdf',
+                mimeType: 'application/pdf',
+                sizeBytes: '10',
+                sha256: null,
+            },
+            sourceTemplate: { id: 'template-3', name: 'Template', version: 1 },
+        });
+
+        // Bước 2 - Act và Bước 3 - Assert: MIME lạ bị từ chối trước khi storage mở file.
+        await expect(
+            target.execute('document-3', 'workspace-1'),
+        ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
     });
 });
