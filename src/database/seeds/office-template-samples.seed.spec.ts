@@ -5,14 +5,18 @@
 // | 2   | Database từ xa             | Ngăn xóa nhầm database dùng chung      | DB_HOST là hostname bên ngoài; gọi guard reset                         | Ném lỗi bảo vệ trước khi kết nối          |
 // | 3   | Ngoài development          | Chặn reset ở môi trường khác           | NODE_ENV=production, DB_HOST=localhost; gọi guard reset                | Ném lỗi bảo vệ                            |
 // | 4   | Truncate dữ liệu nghiệp vụ | Giữ nguyên schema và lịch sử migration | Gọi resetApplicationData với EntityManager giả                         | Chạy một TRUNCATE đúng sáu bảng nghiệp vụ |
+// | 5   | Manifest PPTX              | Chỉ seed bộ có đủ file nguồn và preview| Kiểm tra số mẫu, slide count và hai asset trên đĩa                     | 9 bộ hợp lệ, asset đều tồn tại             |
 
+import { access } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import type { EntityManager } from 'typeorm';
 import {
     assertLocalResetIsAllowed,
+    presentationTemplates,
     resetApplicationData,
-} from '@/database/seeds/document-template-samples.seed';
+} from '@/database/seeds/office-template-samples.seed';
 
-describe('document-template-samples.seed', () => {
+describe('office-template-samples.seed', () => {
     afterEach(() => {
         jest.clearAllMocks();
     });
@@ -71,5 +75,41 @@ describe('document-template-samples.seed', () => {
         expect(mockQuery).toHaveBeenCalledWith(
             'TRUNCATE TABLE public."presentation_slide_previews", public."user_documents", public."office_template_versions", public."office_templates", public."template_categories", public."stored_files" RESTART IDENTITY CASCADE',
         );
+    });
+
+    // Test 5 bảo đảm danh sách PPTX phản ánh đúng chín bộ hoàn chỉnh có file nguồn và ảnh PNG.
+    it('should include only complete PPTX assets with verified slide counts', async () => {
+        // Bước 1 - Arrange: khai báo số slide đã đối chiếu trực tiếp với từng file PPTX.
+        const expectedSlideCounts = {
+            'ban-trinh-bay-pho-bien': 14,
+            'chung-chi-dao-tao': 1,
+            'chung-nhan-hoc-bong': 1,
+            'giai-thuong-nhan-vien-xuat-sac-wave-border': 1,
+            'giay-chung-nhan-nhan-vien-cua-thang': 1,
+            'sach-nho-quang-cao-mau-vang': 4,
+            'so-do-to-chuc-don-gian': 1,
+            'thiet-ke-giot-nuoc': 14,
+            'thiet-ke-may-tinh-bang': 2,
+        };
+
+        // Bước 2 - Act: kiểm tra cả asset nguồn và preview cho từng mẫu đã đăng ký.
+        const assetChecks = await Promise.all(
+            presentationTemplates.map(async (template) => {
+                await access(
+                    resolve(process.cwd(), 'assets', template.sourceKey),
+                );
+                await access(
+                    resolve(process.cwd(), 'assets', template.previewKey),
+                );
+                return [template.slug, template.slideCount] as const;
+            }),
+        );
+
+        // Bước 3 - Assert: không thiếu asset, không lặp slug và slide count khớp manifest.
+        expect(presentationTemplates).toHaveLength(9);
+        expect(
+            new Set(presentationTemplates.map(({ slug }) => slug)).size,
+        ).toBe(presentationTemplates.length);
+        expect(Object.fromEntries(assetChecks)).toEqual(expectedSlideCounts);
     });
 });

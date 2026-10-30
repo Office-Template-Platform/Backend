@@ -1,7 +1,7 @@
 # Hệ thống và thứ tự khởi động
 # Gồm PostgreSQL local, job migration/seed và API NestJS; cấu hình lấy từ api/.env.
 # PostgreSQL healthy → migration và seed thành công → API; API_HOST_PORT:PORT và DB_HOST_PORT:DB_PORT.
-# Host port chỉ bind vào 127.0.0.1; `docker compose down` giữ database và file DOCX đầu ra.
+# Host port chỉ bind vào 127.0.0.1; `docker compose down` giữ database và file DOCX/PPTX đầu ra.
 name: ${COMPOSE_PROJECT_NAME:?Set COMPOSE_PROJECT_NAME in api/.env}
 
 services:
@@ -37,7 +37,7 @@ services:
 
     migrate:
         # Service: job một lần; Port: không publish ra host hoặc network.
-        # Vai trò: áp dụng migration, seed 5 mẫu DOCX mới và dọn bộ demo cũ trước khi API khởi động.
+        # Vai trò: áp dụng migration và seed catalog DOCX/PPTX trước khi API khởi động.
         # Kết nối: PostgreSQL qua DNS service `postgres`; chỉ chạy sau health check.
         container_name: ${MIGRATE_CONTAINER_NAME:?Set MIGRATE_CONTAINER_NAME in api/.env}
         image: ${API_IMAGE:?Set API_IMAGE in api/.env}
@@ -57,7 +57,7 @@ services:
             - -c
             - >-
                 node ./node_modules/typeorm/cli.js migration:run -d dist/database/config/data-source.js
-                && node dist/database/seeds/document-template-samples.seed.js
+                && node dist/database/seeds/office-template-samples.seed.js
         depends_on:
             postgres:
                 condition: service_healthy
@@ -66,8 +66,8 @@ services:
 
     api:
         # Service: NestJS HTTP API; Port: API_HOST_PORT trên host → PORT trong container.
-        # Vai trò: phục vụ thư viện mẫu DOCX; health check gọi /api/health.
-        # Kết nối: PostgreSQL qua DNS `postgres`; dữ liệu DOCX đầu ra ở named volume riêng.
+        # Vai trò: phục vụ thư viện mẫu DOCX/PPTX; health check gọi /api/health.
+        # Kết nối: PostgreSQL qua DNS `postgres`; file tài liệu đầu ra ở named volume riêng.
         container_name: ${API_CONTAINER_NAME:?Set API_CONTAINER_NAME in api/.env}
         image: ${API_IMAGE:?Set API_IMAGE in api/.env}
         build:
@@ -155,7 +155,7 @@ volumes:
         external: true
     office-template-api-file-storage:
         name: ${FILE_STORAGE_VOLUME_NAME:?Set FILE_STORAGE_VOLUME_NAME in api/.env}
-        # Giữ file DOCX người dùng tạo qua lần recreate hoặc cập nhật API container.
+        # Giữ file DOCX/PPTX người dùng tạo qua lần recreate hoặc cập nhật API container.
     office-template-onlyoffice-logs:
         # Lưu log Docs Server qua lần recreate để tiện xem lỗi editor/callback.
     office-template-onlyoffice-data:

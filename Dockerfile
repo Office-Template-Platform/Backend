@@ -50,7 +50,7 @@ COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_m
 # Chỉ đưa JavaScript đã biên dịch vào image chạy, không đưa TypeScript source.
 COPY --from=build --chown=node:node /app/dist ./dist
 
-# Đưa năm DOCX mẫu cùng ảnh preview WebP vào image.
+# Đưa asset DOCX/PPTX cùng ảnh preview WebP vào image.
 # Seed và preview dùng cùng bộ asset trong container.
 COPY --from=build --chown=node:node /app/assets ./assets
 

@@ -1,5 +1,5 @@
-// Seed bộ mẫu DOCX vào PostgreSQL, thuộc lớp database và được gọi bằng script CLI.
-// Mặc định chỉ thêm dữ liệu còn thiếu; cờ --reset chỉ chạy ở development trên host local.
+// Seed catalog DOCX/PPTX vào PostgreSQL; metadata và checksum được lấy từ asset trong assets/.
+// Mặc định đồng bộ mẫu mà không xóa dữ liệu người dùng; cờ --reset chỉ dành cho database local development.
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -19,7 +19,26 @@ import { createDatabaseOptions } from '@/database/config/database.options';
 
 const DOCX_MIME_TYPE =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_MIME_TYPE =
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const PNG_MIME_TYPE = 'image/png';
 const WEBP_MIME_TYPE = 'image/webp';
+
+// Metadata của một mẫu catalog; asset được lưu trong database dưới dạng tham chiếu, không nhúng byte.
+interface TemplateSeed {
+    name: string;
+    slug: string;
+    description: string;
+    categorySlug: string;
+    sourceKey: string;
+    previewKey: string;
+    featured: boolean;
+}
+
+// PPTX bổ sung số slide nguồn để catalog không suy ra số slide từ lượng ảnh preview.
+interface PresentationTemplateSeed extends TemplateSeed {
+    slideCount: number;
+}
 
 const categories = [
     { name: 'Bản tin', slug: 'ban-tin', sortOrder: 10 },
@@ -29,6 +48,9 @@ const categories = [
     { name: 'Báo cáo', slug: 'bao-cao', sortOrder: 50 },
     { name: 'Kinh doanh', slug: 'kinh-doanh', sortOrder: 60 },
     { name: 'Giáo dục', slug: 'giao-duc', sortOrder: 70 },
+    { name: 'Chứng nhận', slug: 'chung-nhan', sortOrder: 80 },
+    { name: 'Thiết kế sáng tạo', slug: 'thiet-ke-sang-tao', sortOrder: 100 },
+    { name: 'Sơ đồ & tổ chức', slug: 'so-do-to-chuc', sortOrder: 110 },
 ] as const;
 
 const templates = [
@@ -126,7 +148,119 @@ const templates = [
         previewKey: 'document-templates/Phiếu quà tặng ngày lễ/preview.webp',
         featured: true,
     },
-] as const;
+] as const satisfies readonly TemplateSeed[];
+
+// Chỉ đăng ký bộ mẫu có đủ PPTX nguồn và ảnh bìa; thư mục chỉ có preview được giữ ngoài catalog.
+export const presentationTemplates = [
+    {
+        name: 'Bản trình bày phổ biến',
+        slug: 'ban-trinh-bay-pho-bien',
+        description:
+            'Bộ slide đa mục đích với bố cục rõ ràng để giới thiệu ý tưởng, sản phẩm hoặc kế hoạch.',
+        categorySlug: 'kinh-doanh',
+        sourceKey: 'presentation-templates/Bản trình bày phổ biến/file.pptx',
+        previewKey: 'presentation-templates/Bản trình bày phổ biến/preview.png',
+        slideCount: 14,
+        featured: true,
+    },
+    {
+        name: 'Chứng chỉ đào tạo',
+        slug: 'chung-chi-dao-tao',
+        description:
+            'Mẫu chứng chỉ hoàn thành khóa học hoặc chương trình đào tạo, sẵn sàng cá nhân hóa.',
+        categorySlug: 'giao-duc',
+        sourceKey: 'presentation-templates/Chứng chỉ đào tạo/file.pptx',
+        previewKey: 'presentation-templates/Chứng chỉ đào tạo/preview.png',
+        slideCount: 1,
+        featured: true,
+    },
+    {
+        name: 'Chứng nhận học bổng',
+        slug: 'chung-nhan-hoc-bong',
+        description:
+            'Mẫu chứng nhận trang trọng để ghi nhận học sinh, sinh viên nhận học bổng.',
+        categorySlug: 'giao-duc',
+        sourceKey: 'presentation-templates/Chứng nhận học bổng/file.pptx',
+        previewKey: 'presentation-templates/Chứng nhận học bổng/preview.png',
+        slideCount: 1,
+        featured: true,
+    },
+    {
+        name: 'Giải thưởng nhân viên xuất sắc',
+        slug: 'giai-thuong-nhan-vien-xuat-sac-wave-border',
+        description:
+            'Mẫu giải thưởng viền sóng để vinh danh nhân sự có thành tích nổi bật.',
+        categorySlug: 'chung-nhan',
+        sourceKey:
+            'presentation-templates/Giải thưởng nhân viên xuất sắc của Wave border/file.pptx',
+        previewKey:
+            'presentation-templates/Giải thưởng nhân viên xuất sắc của Wave border/preview.png',
+        slideCount: 1,
+        featured: false,
+    },
+    {
+        name: 'Giấy chứng nhận nhân viên của tháng',
+        slug: 'giay-chung-nhan-nhan-vien-cua-thang',
+        description:
+            'Mẫu chứng nhận để ghi nhận đóng góp và kết quả làm việc nổi bật trong tháng.',
+        categorySlug: 'chung-nhan',
+        sourceKey:
+            'presentation-templates/Giấy chứng nhận cho nhân viên của tháng/file.pptx',
+        previewKey:
+            'presentation-templates/Giấy chứng nhận cho nhân viên của tháng/preview.png',
+        slideCount: 1,
+        featured: false,
+    },
+    {
+        name: 'Sách nhỏ quảng cáo màu vàng',
+        slug: 'sach-nho-quang-cao-mau-vang',
+        description:
+            'Bộ slide quảng cáo tông vàng để giới thiệu sản phẩm, dịch vụ hoặc chiến dịch kinh doanh.',
+        categorySlug: 'kinh-doanh',
+        sourceKey:
+            'presentation-templates/Sách nhỏ quảng cáo màu vàng/file.pptx',
+        previewKey:
+            'presentation-templates/Sách nhỏ quảng cáo màu vàng/preview.png',
+        slideCount: 4,
+        featured: true,
+    },
+    {
+        name: 'Thiết kế máy tính bảng',
+        slug: 'thiet-ke-may-tinh-bang',
+        description:
+            'Bộ slide mô phỏng giao diện trên máy tính bảng, phù hợp giới thiệu sản phẩm số và nội dung đào tạo.',
+        categorySlug: 'giao-duc',
+        sourceKey: 'presentation-templates/Thiết kế Máy tính bảng/file.pptx',
+        previewKey: 'presentation-templates/Thiết kế Máy tính bảng/preview.png',
+        slideCount: 2,
+        featured: false,
+    },
+    {
+        name: 'Sơ đồ tổ chức đơn giản',
+        slug: 'so-do-to-chuc-don-gian',
+        description:
+            'Mẫu sơ đồ trực quan để giới thiệu cơ cấu phòng ban, nhóm hoặc vai trò trong tổ chức.',
+        categorySlug: 'so-do-to-chuc',
+        sourceKey: 'presentation-templates/Sơ đồ tổ chức đơn giản/file.pptx',
+        previewKey: 'presentation-templates/Sơ đồ tổ chức đơn giản/preview.png',
+        slideCount: 1,
+        featured: false,
+    },
+    {
+        name: 'Thiết kế giọt nước',
+        slug: 'thiet-ke-giot-nuoc',
+        description:
+            'Bộ slide chủ đề giọt nước với nhiều bố cục hình ảnh để trình bày ý tưởng hoặc nội dung sáng tạo.',
+        categorySlug: 'thiet-ke-sang-tao',
+        sourceKey: 'presentation-templates/Thiết kế giọt nước/file.pptx',
+        previewKey: 'presentation-templates/Thiết kế giọt nước/preview.png',
+        slideCount: 14,
+        featured: true,
+    },
+] as const satisfies readonly PresentationTemplateSeed[];
+
+// Mẫu lịch không còn asset trong catalog mới; giữ bản ghi ở trạng thái lưu trữ để không làm đứt lịch sử.
+const archivedPresentationTemplateSlugs = ['lich-treo-tuong-co-dien'] as const;
 
 const replacedTemplateSlugs = [
     'thu-xin-viec',
@@ -148,6 +282,7 @@ const replacedCategorySlugs = [
     'ke-hoach',
     'kinh-doanh',
     'quan-ly-du-an',
+    'lich-ke-hoach',
 ] as const;
 
 const applicationDataTables = [
@@ -192,33 +327,167 @@ async function ensureStoredFile(
     objectKey: string,
     originalFilename: string,
     mimeType: string,
+    storageNamespace = 'document-template-assets',
 ): Promise<StoredFile> {
     const files = manager.getRepository(StoredFile);
     const existing = await files.findOne({
         where: {
             provider: FileStorageProvider.LOCAL,
-            storageNamespace: 'document-template-assets',
+            storageNamespace,
             objectKey,
         },
     });
 
-    if (existing) {
-        return existing;
-    }
-
+    // Hash nội dung hiện tại trước khi đồng bộ để metadata phản ánh đúng asset mà API đang phục vụ.
     const assetPath = resolve(process.cwd(), 'assets', objectKey);
     const content = await readFile(assetPath);
-    const file = files.create({
-        provider: FileStorageProvider.LOCAL,
-        storageNamespace: 'document-template-assets',
-        objectKey,
+    const metadata = {
         originalFilename,
         mimeType,
         sizeBytes: String(content.byteLength),
         sha256: createHash('sha256').update(content).digest('hex'),
+    };
+
+    if (existing) {
+        const isMetadataCurrent =
+            existing.originalFilename === metadata.originalFilename &&
+            existing.mimeType === metadata.mimeType &&
+            existing.sizeBytes === metadata.sizeBytes &&
+            existing.sha256 === metadata.sha256;
+
+        // Seed chạy lặp không ghi lại hàng file nếu byte và metadata đã đồng bộ.
+        return isMetadataCurrent
+            ? existing
+            : files.save(files.merge(existing, metadata));
+    }
+
+    const file = files.create({
+        provider: FileStorageProvider.LOCAL,
+        storageNamespace,
+        objectKey,
+        ...metadata,
     });
 
     return files.save(file);
+}
+
+// Tạo hoặc đồng bộ thông tin public của mẫu theo seed; catalog seed luôn được xuất bản và danh mục được kích hoạt.
+async function ensureTemplate(
+    manager: EntityManager,
+    productType: OfficeTemplateProductType,
+    templateSeed: TemplateSeed,
+    categoryId: string,
+): Promise<OfficeTemplate> {
+    const repository = manager.getRepository(OfficeTemplate);
+    let template = await repository.findOne({
+        where: { productType, slug: templateSeed.slug },
+        withDeleted: true,
+    });
+    const now = new Date();
+
+    if (!template) {
+        template = repository.create({
+            productType,
+            categoryId,
+            name: templateSeed.name,
+            slug: templateSeed.slug,
+            description: templateSeed.description,
+            status: OfficeTemplateStatus.PUBLISHED,
+            isFeatured: templateSeed.featured,
+            publishedAt: now,
+            deletedAt: null,
+        });
+    } else {
+        // Mẫu seed bị xóa mềm được khôi phục vì asset tương ứng vẫn thuộc catalog đang phát hành.
+        if (template.deletedAt) {
+            await repository.restore(template.id);
+        }
+
+        template = repository.merge(template, {
+            categoryId,
+            name: templateSeed.name,
+            description: templateSeed.description,
+            status: OfficeTemplateStatus.PUBLISHED,
+            isFeatured: templateSeed.featured,
+            publishedAt: template.publishedAt ?? now,
+            deletedAt: null,
+        });
+    }
+
+    return repository.save(template);
+}
+
+// Giữ version hiện hành nhưng đồng bộ asset reference và slide count; nếu thiếu current thì tạo số version kế tiếp.
+async function ensureCurrentVersion(
+    manager: EntityManager,
+    templateId: string,
+    sourceFile: StoredFile,
+    thumbnailFile: StoredFile,
+    slideCount: number | null,
+    changeNote: string,
+): Promise<OfficeTemplateVersion> {
+    const repository = manager.getRepository(OfficeTemplateVersion);
+    const currentVersion = await repository.findOne({
+        where: { templateId, isCurrent: true },
+    });
+
+    if (currentVersion) {
+        return repository.save(
+            repository.merge(currentVersion, {
+                sourceFileId: sourceFile.id,
+                thumbnailFileId: thumbnailFile.id,
+                slideCount,
+            }),
+        );
+    }
+
+    const latestVersion = await repository.findOne({
+        where: { templateId },
+        order: { versionNumber: 'DESC' },
+    });
+
+    return repository.save(
+        repository.create({
+            templateId,
+            versionNumber: (latestVersion?.versionNumber ?? 0) + 1,
+            sourceFileId: sourceFile.id,
+            thumbnailFileId: thumbnailFile.id,
+            slideCount,
+            isCurrent: true,
+            changeNote,
+        }),
+    );
+}
+
+// Chỉ lưu preview slide có ảnh thật; seed không nhân bản thumbnail bìa cho các slide còn lại.
+async function ensureSlidePreview(
+    manager: EntityManager,
+    versionId: string,
+    previewFileId: string,
+): Promise<void> {
+    const repository = manager.getRepository(PresentationSlidePreview);
+    const existing = await repository.findOne({
+        where: { versionId, slideNumber: 1 },
+    });
+
+    if (existing) {
+        await repository.save(
+            repository.merge(existing, {
+                previewFileId,
+                title: 'Bìa',
+            }),
+        );
+        return;
+    }
+
+    await repository.save(
+        repository.create({
+            versionId,
+            slideNumber: 1,
+            previewFileId,
+            title: 'Bìa',
+        }),
+    );
 }
 
 // Xóa seed cũ khi chưa phát sinh tài liệu tham chiếu; nếu đã có lịch sử thì ẩn khỏi catalog.
@@ -351,8 +620,31 @@ async function removeReplacedTemplates(manager: EntityManager): Promise<void> {
     }
 }
 
+// Ẩn mẫu PPTX đã bỏ asset khỏi catalog nhưng giữ version/file reference cho tài liệu cũ.
+async function archiveReplacedPresentationTemplates(
+    manager: EntityManager,
+): Promise<void> {
+    const repository = manager.getRepository(OfficeTemplate);
+    const oldTemplates = await repository.find({
+        where: {
+            productType: OfficeTemplateProductType.PRESENTATION,
+            slug: In([...archivedPresentationTemplateSlugs]),
+        },
+        withDeleted: true,
+    });
+
+    for (const template of oldTemplates) {
+        // Archived mẫu không còn xuất hiện trong catalog nhưng không làm mất liên kết lịch sử.
+        await repository.update(template.id, {
+            status: OfficeTemplateStatus.ARCHIVED,
+            isFeatured: false,
+            publishedAt: null,
+        });
+    }
+}
+
 // Nạp mẫu trong một transaction; reset và seed cùng commit để lỗi không để database ở trạng thái rỗng.
-async function seedDocumentTemplates(resetRequested: boolean): Promise<void> {
+async function seedOfficeTemplates(resetRequested: boolean): Promise<void> {
     // Chặn reset trước khi khởi tạo kết nối để không có thao tác xóa trên database ngoài local.
     if (resetRequested) {
         assertLocalResetIsAllowed(process.env);
@@ -401,51 +693,24 @@ async function seedDocumentTemplates(resetRequested: boolean): Promise<void> {
                 categoriesBySlug.set(category.slug, category);
             }
 
-            const templateRepository = manager.getRepository(OfficeTemplate);
-            const versionRepository = manager.getRepository(
-                OfficeTemplateVersion,
-            );
-
             for (const templateSeed of templates) {
-                let template = await templateRepository.findOne({
-                    where: {
-                        productType: OfficeTemplateProductType.DOCUMENT,
-                        slug: templateSeed.slug,
-                    },
-                });
-
-                if (template) {
-                    const currentVersion = await versionRepository.findOne({
-                        where: { templateId: template.id, isCurrent: true },
-                    });
-                    if (currentVersion) {
-                        continue;
-                    }
-                } else {
-                    const category = categoriesBySlug.get(
-                        templateSeed.categorySlug,
-                    );
-                    if (!category) {
-                        throw new Error(
-                            `Seed category is missing: ${templateSeed.categorySlug}`,
-                        );
-                    }
-
-                    template = await templateRepository.save(
-                        templateRepository.create({
-                            productType: OfficeTemplateProductType.DOCUMENT,
-                            categoryId: category.id,
-                            name: templateSeed.name,
-                            slug: templateSeed.slug,
-                            description: templateSeed.description,
-                            status: OfficeTemplateStatus.PUBLISHED,
-                            isFeatured: templateSeed.featured,
-                            publishedAt: new Date(),
-                        }),
+                const category = categoriesBySlug.get(
+                    templateSeed.categorySlug,
+                );
+                if (!category) {
+                    throw new Error(
+                        `Seed category is missing: ${templateSeed.categorySlug}`,
                     );
                 }
 
-                // File rows và phiên bản được commit cùng transaction với template metadata.
+                const template = await ensureTemplate(
+                    manager,
+                    OfficeTemplateProductType.DOCUMENT,
+                    templateSeed,
+                    category.id,
+                );
+
+                // File rows, template metadata và version được đồng bộ trong cùng transaction.
                 const sourceFile = await ensureStoredFile(
                     manager,
                     templateSeed.sourceKey,
@@ -458,28 +723,73 @@ async function seedDocumentTemplates(resetRequested: boolean): Promise<void> {
                     `${templateSeed.slug}.webp`,
                     WEBP_MIME_TYPE,
                 );
-                await versionRepository.save(
-                    versionRepository.create({
-                        templateId: template.id,
-                        versionNumber: 1,
-                        sourceFileId: sourceFile.id,
-                        thumbnailFileId: previewFile.id,
-                        isCurrent: true,
-                        changeNote: 'Phiên bản mẫu ban đầu.',
-                    }),
+                await ensureCurrentVersion(
+                    manager,
+                    template.id,
+                    sourceFile,
+                    previewFile,
+                    null,
+                    'Phiên bản mẫu ban đầu.',
                 );
+            }
+
+            // Seed presentation dùng cùng category, file metadata và version schema với catalog DOCX.
+            for (const templateSeed of presentationTemplates) {
+                const category = categoriesBySlug.get(
+                    templateSeed.categorySlug,
+                );
+                if (!category) {
+                    throw new Error(
+                        `Seed category is missing: ${templateSeed.categorySlug}`,
+                    );
+                }
+
+                const template = await ensureTemplate(
+                    manager,
+                    OfficeTemplateProductType.PRESENTATION,
+                    templateSeed,
+                    category.id,
+                );
+
+                // Namespace presentation tách khỏi DOCX để storage chỉ cho copy đúng định dạng nguồn.
+                const sourceFile = await ensureStoredFile(
+                    manager,
+                    templateSeed.sourceKey,
+                    `${templateSeed.slug}.pptx`,
+                    PPTX_MIME_TYPE,
+                    'presentation-template-assets',
+                );
+                const previewFile = await ensureStoredFile(
+                    manager,
+                    templateSeed.previewKey,
+                    `${templateSeed.slug}.png`,
+                    PNG_MIME_TYPE,
+                    'presentation-template-assets',
+                );
+                const version = await ensureCurrentVersion(
+                    manager,
+                    template.id,
+                    sourceFile,
+                    previewFile,
+                    templateSeed.slideCount,
+                    'Phiên bản trình chiếu ban đầu.',
+                );
+
+                // Preview bìa được dùng làm ảnh slide 1; không tạo ảnh giả cho các slide chưa có thumbnail.
+                await ensureSlidePreview(manager, version.id, previewFile.id);
             }
 
             // Seed thường dọn bản demo cũ; chế độ reset đã xóa sạch nên không cần bước này.
             if (!resetRequested) {
+                await archiveReplacedPresentationTemplates(manager);
                 await removeReplacedTemplates(manager);
             }
         });
 
         console.info(
             resetRequested
-                ? `Đã reset dữ liệu nghiệp vụ và seed ${templates.length} mẫu DOCX.`
-                : `Đã xác nhận ${templates.length} mẫu DOCX mới.`,
+                ? `Đã reset dữ liệu nghiệp vụ và seed ${templates.length} mẫu DOCX cùng ${presentationTemplates.length} mẫu PPTX.`
+                : `Đã đồng bộ ${templates.length} mẫu DOCX cùng ${presentationTemplates.length} mẫu PPTX.`,
         );
     } finally {
         await dataSource.destroy();
@@ -489,8 +799,8 @@ async function seedDocumentTemplates(resetRequested: boolean): Promise<void> {
 // Chỉ chạy CLI khi file là entry point; import helper trong Jest không kết nối database.
 if (require.main === module) {
     const resetRequested = process.argv.includes('--reset');
-    void seedDocumentTemplates(resetRequested).catch((error: unknown) => {
-        console.error('Không thể seed dữ liệu thư viện mẫu DOCX.', error);
+    void seedOfficeTemplates(resetRequested).catch((error: unknown) => {
+        console.error('Không thể seed dữ liệu thư viện Office.', error);
         process.exitCode = 1;
     });
 }
