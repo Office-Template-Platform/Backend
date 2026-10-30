@@ -9,6 +9,7 @@ import {
     UserDocumentStatus,
 } from '@/database/enums/office-template.enums';
 import type {
+    ExpectedUserDocumentFile,
     NewUserDocumentFile,
     ReplacedUserDocumentFile,
     UserDocumentWriterContract,
@@ -18,6 +19,7 @@ import {
     toStoredFileReference,
     toUserDocumentRecord,
 } from '@/modules/document-template-library/infrastructure/repositories/mappers/document-template-record.mapper';
+import { UserDocumentRevisionConflictError } from '@/modules/document-template-library/application/errors/user-document-revision-conflict.error';
 
 @Injectable()
 // Adapter giữ SQL và transaction cho mọi chuyển trạng thái/file metadata của user document.
@@ -34,9 +36,11 @@ export class TypeOrmUserDocumentWriterRepository implements UserDocumentWriterCo
     async createProvisioningDocument(
         sourceTemplateVersionId: string,
         title: string,
+        workspaceId: string,
     ): Promise<string> {
         const document = this.userDocuments.create({
             sourceTemplateVersionId,
+            anonymousWorkspaceId: workspaceId,
             title,
             status: UserDocumentStatus.PROVISIONING,
             outputFileId: null,
@@ -89,42 +93,82 @@ export class TypeOrmUserDocumentWriterRepository implements UserDocumentWriterCo
         });
     }
 
-    // Thay output atomically; file metadata cũ chỉ xóa trong transaction sau khi reference mới được gán.
+    // Bước 1 khóa row tài liệu; xác nhận READY và revision nếu caller truyền file kỳ vọng.
+    // Callback cũ bị từ chối trước khi tạo metadata; transaction lỗi giữ nguyên file hiện hành.
+    // Bước 2 tạo metadata mới, chuyển FK/relation rồi xóa metadata cũ trong cùng transaction.
+    // Chỉ trả previousFile sau commit để application dọn object vật lý cũ an toàn.
     async replaceDocumentFile(
         documentId: string,
         outputFile: NewUserDocumentFile,
+        expectedCurrentFile?: ExpectedUserDocumentFile,
     ): Promise<ReplacedUserDocumentFile> {
         return this.dataSource.transaction(async (manager) => {
+            // Bước 1.1: khóa row để cập nhật đồng thời phải đợi revision trước commit.
             const document = await manager.findOne(UserDocument, {
                 where: { id: documentId },
-                relations: { outputFile: true },
+                lock: { mode: 'pessimistic_write' },
             });
 
+            // Nếu provisioning đã mất, dừng để transaction không commit thay đổi dở dang.
             if (!document) {
                 throw new Error(
                     'User document disappeared during file update.',
                 );
             }
+
+            // Chỉ thay file document READY có output reference; trạng thái khác không có revision hợp lệ.
             if (
                 document.status !== UserDocumentStatus.READY ||
-                !document.outputFile
+                !document.outputFileId
             ) {
                 throw new Error('User document is not ready for file update.');
             }
 
+            // Tải metadata riêng vì SELECT FOR UPDATE không khóa an toàn quan hệ nullable qua outer join.
+            // FK thuộc row đang khóa nên reference vẫn theo cùng revision đang được kiểm tra.
+            const currentOutputFile = await manager.findOne(StoredFile, {
+                where: { id: document.outputFileId },
+            });
+            // FK thiếu metadata thì dừng; không xác định được file cũ để trả cho bước cleanup.
+            if (!currentOutputFile) {
+                throw new Error('User document output file disappeared.');
+            }
+            document.outputFile = currentOutputFile;
+
+            // Bước 1.2: callback truyền file kỳ vọng; lệch namespace/key nghĩa là đã có revision mới.
+            // Từ chối trước khi tạo metadata để callback cũ không ghi đè bản mới nhất.
+            if (
+                expectedCurrentFile &&
+                (document.outputFile.storageNamespace !==
+                    expectedCurrentFile.storageNamespace ||
+                    document.outputFile.objectKey !==
+                        expectedCurrentFile.objectKey)
+            ) {
+                throw new UserDocumentRevisionConflictError();
+            }
+
             const previousFile = toStoredFileReference(document.outputFile);
             const previousFileId = document.outputFile.id;
+
+            // Bước 2.1: ghi metadata mới; lỗi ở bước sau khiến insert này cùng rollback.
             const savedFile = await manager.save(
                 manager.create(StoredFile, {
                     ...outputFile,
                     provider: this.toStorageProvider(outputFile.provider),
                 }),
             );
+
+            // Bước 2.2: đổi cả FK và relation vì entity vẫn giữ relation cũ đã nạp ở trên.
             document.outputFileId = savedFile.id;
+            document.outputFile = savedFile;
             document.failureCode = null;
             const savedDocument = await manager.save(document);
-            // File cũ hết liên kết; xóa record cùng transaction để không giữ metadata mồ côi.
+
+            // Bước 2.3: xóa row metadata cũ sau khi document đã trỏ sang file mới.
+            // Nếu xóa hoặc reload lỗi, transaction rollback FK mới và khôi phục metadata cũ.
             await manager.delete(StoredFile, previousFileId);
+
+            // Nạp lại relation cho read model; nếu thiếu, ném lỗi để rollback transaction.
             const completeDocument = await manager.findOne(UserDocument, {
                 where: { id: savedDocument.id },
                 relations: {
@@ -133,10 +177,12 @@ export class TypeOrmUserDocumentWriterRepository implements UserDocumentWriterCo
                 },
             });
 
+            // Nếu thiếu read model sau update, không trả kết quả thiếu relation cho caller.
             if (!completeDocument) {
                 throw new Error('Updated user document could not be reloaded.');
             }
 
+            // Transaction resolve sau commit; caller nhận reference cũ để xóa object vật lý.
             return {
                 document: toUserDocumentRecord(completeDocument),
                 previousFile,

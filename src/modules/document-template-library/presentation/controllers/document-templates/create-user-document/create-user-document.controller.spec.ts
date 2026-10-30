@@ -1,7 +1,8 @@
-// Nhóm unit test cho CreateUserDocumentController: kiểm tra ID mẫu và title được chuyển tới use case.
-// | STT | Test case       | Mục đích                           | Các bước làm                    | Kết quả mong đợi                     |
-// |-----|-----------------|------------------------------------|---------------------------------|--------------------------------------|
-// | 1   | Tạo bản sao     | Tạo tài liệu riêng từ template     | Gọi create với UUID và title    | Trả summary và chuyển đúng arguments |
+// Nhóm unit test cho CreateUserDocumentController: xác nhận controller chuyển template ID và title sang use case tạo tài liệu.
+// | STT | Test case   | Mục đích                      | Các bước làm                              | Kết quả mong đợi                                |
+// |-----|-------------|-------------------------------|-------------------------------------------|-------------------------------------------------|
+// | 1   | Tạo bản sao | Ủy quyền tạo từ mẫu được chọn | Gọi create với template UUID và DTO title | Trả summary từ service và chuyển đúng arguments |
+
 import type { UserDocumentSummary } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
 import { CreateUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/create-user-document/create-user-document.service';
 import { CreateUserDocumentController } from '@/modules/document-template-library/presentation/controllers/document-templates/create-user-document/create-user-document.controller';
@@ -43,12 +44,12 @@ describe('CreateUserDocumentController', () => {
         mockCreateUserDocument.execute.mockResolvedValue(expected);
 
         // Bước 2 - Act: gọi endpoint POST /document-templates/:templateId/documents.
-        const result = await target.create('template-1', body);
+        const result = await target.create('template-1', 'workspace-1', body);
 
         // Bước 3 - Assert: trả summary và chuyển đúng template ID cùng title.
         expect(result).toEqual(expected);
         expect(mockCreateUserDocument.execute.mock.calls).toEqual([
-            ['template-1', 'My Resume'],
+            ['template-1', 'workspace-1', 'My Resume'],
         ]);
     });
 });

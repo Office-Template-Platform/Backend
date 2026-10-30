@@ -1,12 +1,13 @@
-// Nhóm unit test cho CreateUserDocumentService: kiểm tra bản sao độc lập và bù trừ khi copy/commit lỗi.
-// | STT | Test case             | Mục đích                          | Các bước làm                                  | Kết quả mong đợi                            |
-// |-----|-----------------------|-----------------------------------|-----------------------------------------------|---------------------------------------------|
-// | 1   | Có mẫu và title       | Tạo bản riêng, chuẩn hóa title    | Reader trả source; copy; writer complete     | Summary đúng, key UUID mới, không xóa mẫu   |
-// | 2   | Title trống           | Dùng tên mẫu                      | Reader trả source; gọi execute với spaces    | Provisioning dùng tên mẫu                   |
-// | 3   | Không có mẫu          | Chặn tạo tài liệu                 | Reader trả null; gọi execute                 | Ném lỗi 404, không tạo provisioning         |
-// | 4   | Copy file lỗi         | Đánh dấu provisioning failed      | Copy reject; gọi execute                     | Ném lỗi 500 và lưu failure code             |
-// | 5   | Commit metadata lỗi   | Dọn file mới trước khi báo lỗi    | Copy thành công; complete reject             | Xóa file mới và đánh dấu failed             |
-// | 6   | Cleanup cũng lỗi      | Không che lỗi tạo tài liệu        | Complete reject; remove/mark failed reject   | Vẫn ném lỗi creation đã chuẩn hóa           |
+// Nhóm unit test cho CreateUserDocumentService: xác nhận tạo bản DOCX độc lập và bù trừ trạng thái/file nếu một bước thất bại.
+// | STT | Test case       | Mục đích                           | Các bước làm                                          | Kết quả mong đợi                                      |
+// |-----|-----------------|------------------------------------|-------------------------------------------------------|-------------------------------------------------------|
+// | 1   | Title hợp lệ    | Tạo bản sao với title đã chuẩn hóa | Reader trả source; provisioning; copy file; complete  | Trả summary, key mới và không sửa file mẫu            |
+// | 2   | Title trống     | Dùng tên mẫu làm title mặc định    | Gửi title chỉ có khoảng trắng; reader trả source      | Provisioning và file dùng tên mẫu                     |
+// | 3   | Không có mẫu    | Dừng trước khi tạo provisioning    | Reader trả null; gọi execute                          | Ném not-found, không gọi writer hoặc storage          |
+// | 4   | Copy source lỗi | Đánh dấu provisioning thất bại     | Writer tạo provisioning; storage copy reject          | Ném lỗi tạo an toàn và gọi mark failed                |
+// | 5   | Complete lỗi    | Dọn file mới và đánh dấu failed    | Copy thành công; writer complete reject               | Xóa bản sao, ghi trạng thái failed và báo lỗi an toàn |
+// | 6   | Bù trừ cũng lỗi | Không để lỗi cleanup che lỗi chính | Complete reject; cleanup hoặc mark failed cũng reject | Vẫn ném UserDocumentCreationFailedError               |
+
 import { Logger } from '@nestjs/common';
 import type {
     DocumentFileStorageContract,
@@ -125,13 +126,17 @@ describe('CreateUserDocumentService', () => {
         };
 
         // Bước 2 - Act: tạo tài liệu từ template đã xuất bản.
-        const result = await target.execute('template-1', '  My Resume  ');
+        const result = await target.execute(
+            'template-1',
+            'workspace-1',
+            '  My Resume  ',
+        );
 
         // Bước 3 - Assert: version được ghim, key mới là UUID và chỉ bản output được commit.
         expect(result).toEqual(expectedSummary);
         expect(
             mockDocumentWriter.createProvisioningDocument.mock.calls,
-        ).toEqual([['version-2', 'My Resume']]);
+        ).toEqual([['version-2', 'My Resume', 'workspace-1']]);
         expect(mockFileStorage.copyTemplateFile.mock.calls).toEqual([
             [
                 source.sourceFile,
@@ -152,12 +157,12 @@ describe('CreateUserDocumentService', () => {
         mockFileStorage.copyTemplateFile.mockResolvedValue(outputFile);
 
         // Bước 2 - Act: yêu cầu tạo bản sao với title blank.
-        await target.execute('template-1', '   ');
+        await target.execute('template-1', 'workspace-1', '   ');
 
         // Bước 3 - Assert: cả DB title và tên file hiển thị dùng template name.
         expect(
             mockDocumentWriter.createProvisioningDocument.mock.calls,
-        ).toEqual([['version-2', 'Resume template']]);
+        ).toEqual([['version-2', 'Resume template', 'workspace-1']]);
         expect(mockFileStorage.copyTemplateFile.mock.calls).toEqual([
             [source.sourceFile, expect.any(String), 'Resume template.docx'],
         ]);
@@ -169,9 +174,9 @@ describe('CreateUserDocumentService', () => {
         mockTemplateReader.findCurrentSource.mockResolvedValue(null);
 
         // Bước 2 - Act và Bước 3 - Assert: báo 404 và không gọi writer/storage.
-        await expect(target.execute('hidden-template')).rejects.toBeInstanceOf(
-            DocumentTemplateNotFoundError,
-        );
+        await expect(
+            target.execute('hidden-template', 'workspace-1'),
+        ).rejects.toBeInstanceOf(DocumentTemplateNotFoundError);
         expect(
             mockDocumentWriter.createProvisioningDocument.mock.calls,
         ).toEqual([]);
@@ -186,9 +191,9 @@ describe('CreateUserDocumentService', () => {
         );
 
         // Bước 2 - Act và Bước 3 - Assert: lỗi nội bộ được thay bằng lỗi 500 ổn định.
-        await expect(target.execute('template-1')).rejects.toBeInstanceOf(
-            UserDocumentCreationFailedError,
-        );
+        await expect(
+            target.execute('template-1', 'workspace-1'),
+        ).rejects.toBeInstanceOf(UserDocumentCreationFailedError);
         expect(mockFileStorage.removeUserDocument.mock.calls).toEqual([]);
         expect(mockDocumentWriter.markDocumentFailed.mock.calls).toEqual([
             ['document-1', 'DOCUMENT_CREATION_FAILED'],
@@ -203,9 +208,9 @@ describe('CreateUserDocumentService', () => {
         );
 
         // Bước 2 - Act và Bước 3 - Assert: không để orphan và báo lỗi đã chuẩn hóa.
-        await expect(target.execute('template-1')).rejects.toBeInstanceOf(
-            UserDocumentCreationFailedError,
-        );
+        await expect(
+            target.execute('template-1', 'workspace-1'),
+        ).rejects.toBeInstanceOf(UserDocumentCreationFailedError);
         expect(mockFileStorage.removeUserDocument.mock.calls).toEqual([
             [outputFile],
         ]);
@@ -228,9 +233,9 @@ describe('CreateUserDocumentService', () => {
         );
 
         // Bước 2 - Act và Bước 3 - Assert: response vẫn chỉ chứa lỗi tạo đã làm sạch.
-        await expect(target.execute('template-1')).rejects.toBeInstanceOf(
-            UserDocumentCreationFailedError,
-        );
+        await expect(
+            target.execute('template-1', 'workspace-1'),
+        ).rejects.toBeInstanceOf(UserDocumentCreationFailedError);
         expect(mockFileStorage.removeUserDocument.mock.calls).toEqual([
             [outputFile],
         ]);

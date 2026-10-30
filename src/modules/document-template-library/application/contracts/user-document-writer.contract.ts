@@ -3,6 +3,10 @@ import type { StoredFileReference } from '@/modules/document-template-library/ap
 import type { UserDocumentRecord } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
 
 export type NewUserDocumentFile = StoredFileReference;
+export type ExpectedUserDocumentFile = Pick<
+    StoredFileReference,
+    'storageNamespace' | 'objectKey'
+>;
 
 export type ReplacedUserDocumentFile = {
     document: UserDocumentRecord;
@@ -14,6 +18,7 @@ export interface UserDocumentWriterContract {
     createProvisioningDocument(
         sourceTemplateVersionId: string,
         title: string,
+        workspaceId: string,
     ): Promise<string>;
     completeDocument(
         documentId: string,
@@ -22,6 +27,7 @@ export interface UserDocumentWriterContract {
     replaceDocumentFile(
         documentId: string,
         outputFile: NewUserDocumentFile,
+        expectedCurrentFile?: ExpectedUserDocumentFile,
     ): Promise<ReplacedUserDocumentFile>;
     markDocumentFailed(documentId: string, failureCode: string): Promise<void>;
 }

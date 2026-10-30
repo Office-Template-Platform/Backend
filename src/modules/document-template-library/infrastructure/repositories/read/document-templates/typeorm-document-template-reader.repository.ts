@@ -200,30 +200,34 @@ export class TypeOrmDocumentTemplateReaderRepository implements DocumentTemplate
     private findCurrentVersion(
         id: string,
     ): Promise<OfficeTemplateVersion | null> {
-        return this.templates
-            .createQueryBuilder('template')
-            .innerJoinAndSelect('template.category', 'category')
-            .innerJoinAndSelect(
-                'template.versions',
-                'version',
-                'version.isCurrent = :isCurrent',
-                { isCurrent: true },
-            )
-            .innerJoinAndSelect('version.sourceFile', 'sourceFile')
-            .leftJoinAndSelect('version.thumbnailFile', 'thumbnailFile')
-            .where('template.id = :id', { id })
-            .andWhere('template.productType = :productType', {
-                productType: OfficeTemplateProductType.DOCUMENT,
-            })
-            .andWhere('template.status = :status', {
-                status: OfficeTemplateStatus.PUBLISHED,
-            })
-            .andWhere('category.isActive = :categoryActive', {
-                categoryActive: true,
-            })
-            .andWhere('template.deletedAt IS NULL')
-            .getOne()
-            .then((template) => template?.versions[0] ?? null);
+        return (
+            this.templates
+                .createQueryBuilder('template')
+                .innerJoinAndSelect('template.category', 'category')
+                .innerJoinAndSelect(
+                    'template.versions',
+                    'version',
+                    'version.isCurrent = :isCurrent',
+                    { isCurrent: true },
+                )
+                // Load ngược template trên version vì findCurrentSource đọc id và tên từ quan hệ này.
+                .innerJoinAndSelect('version.template', 'sourceTemplate')
+                .innerJoinAndSelect('version.sourceFile', 'sourceFile')
+                .leftJoinAndSelect('version.thumbnailFile', 'thumbnailFile')
+                .where('template.id = :id', { id })
+                .andWhere('template.productType = :productType', {
+                    productType: OfficeTemplateProductType.DOCUMENT,
+                })
+                .andWhere('template.status = :status', {
+                    status: OfficeTemplateStatus.PUBLISHED,
+                })
+                .andWhere('category.isActive = :categoryActive', {
+                    categoryActive: true,
+                })
+                .andWhere('template.deletedAt IS NULL')
+                .getOne()
+                .then((template) => template?.versions[0] ?? null)
+        );
     }
 
     // Chỉ map các trường catalog được công khai; database entity không rời infrastructure.

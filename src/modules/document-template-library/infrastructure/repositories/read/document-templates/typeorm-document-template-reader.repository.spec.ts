@@ -1,12 +1,13 @@
-// Nhóm unit test cho TypeOrmDocumentTemplateReaderRepository: kiểm tra filter SQL, pagination và mapping read model.
-// | STT | Test case          | Mục đích                           | Các bước làm                               | Kết quả mong đợi                              |
-// |-----|--------------------|------------------------------------|--------------------------------------------|------------------------------------------------|
-// | 1   | Có mẫu và filters  | Bind filter, sort và phân trang     | Query trả entity; gọi list                 | SQL nhận params an toàn, metadata đúng         |
-// | 2   | Trang rỗng          | Tính tổng trang khi không có mẫu    | Query trả [], total 0                      | items rỗng, totalPages 0                       |
-// | 3   | Có danh mục         | Chuyển COUNT từ Postgres sang number| Query trả count string                     | templateCount là number                       |
-// | 4   | Detail có mẫu       | Map trường public và ngày ISO       | Query trả entity với joins                 | Detail đúng, previewUrl có path API             |
-// | 5   | Detail không có     | Ẩn mẫu private/deleted             | Query trả null                              | Trả null                                       |
-// | 6   | Có source/preview   | Ghim đúng current version và files | Query trả current version                  | Source và preview reference chính xác           |
+// Nhóm unit test cho TypeOrmDocumentTemplateReaderRepository: kiểm tra filter SQL, phân trang, map catalog và truy xuất current version cùng file liên quan.
+// | STT | Test case                 | Mục đích                                  | Các bước làm                                                   | Kết quả mong đợi                                           |
+// |-----|---------------------------|-------------------------------------------|----------------------------------------------------------------|------------------------------------------------------------|
+// | 1   | Có mẫu và filters         | Bind filter và tính metadata phân trang   | Query trả entity; gọi list với search/category/featured/page   | SQL dùng parameters, sort và skip/take đúng; response đúng |
+// | 2   | Trang rỗng                | Không tạo tổng trang sai khi không có mẫu | Query trả [] và total=0; gọi list                              | items rỗng, totalPages=0                                   |
+// | 3   | Có danh mục               | Đổi COUNT từ PostgreSQL sang number       | Query trả templateCount dạng string; gọi listCategories        | templateCount là number                                    |
+// | 4   | Detail có mẫu             | Map trường public và ngày ISO             | Query trả published template kèm category/version              | Detail đúng và previewUrl trỏ endpoint preview             |
+// | 5   | Detail không có mẫu       | Ẩn mẫu không public hoặc đã xóa           | Query getOne trả null; gọi findPublishedById                   | Reader trả null                                            |
+// | 6   | Current source và preview | Lấy đúng version và file liên kết         | Query trả current version kèm source/thumbnail; gọi hai reader | Source và preview reference đúng template/version          |
+
 import { Repository } from 'typeorm';
 import { OfficeTemplate } from '@/database/entities/office-template.entity';
 import { OfficeTemplateVersion } from '@/database/entities/office-template-version.entity';

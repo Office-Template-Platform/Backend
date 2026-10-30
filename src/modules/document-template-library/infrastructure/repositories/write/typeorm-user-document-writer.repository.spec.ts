@@ -1,12 +1,12 @@
-// Nhóm unit test cho TypeOrmUserDocumentWriterRepository: kiểm tra provisioning, transaction hoàn tất/thay file và lỗi invariant.
-// | STT | Test case                   | Mục đích                         | Các bước làm                                  | Kết quả mong đợi                             |
-// |-----|-----------------------------|----------------------------------|-----------------------------------------------|----------------------------------------------|
-// | 1   | Tạo provisioning            | Lưu trạng thái ban đầu           | create/save trả id                            | Trả id và status provisioning                |
-// | 2   | Complete thành công         | Ghi file + document cùng transaction| Manager tạo/lưu/reload record                | READY, output file và download URL đúng      |
-// | 3   | Provisioning không còn      | Rollback file metadata           | Manager save file; findOne null               | Transaction reject, không lưu document       |
-// | 4   | Replace thành công          | Thay file nguyên tử              | Manager đọc READY; save mới; delete cũ        | Trả record mới và previousFile               |
-// | 5   | Replace khi chưa READY      | Không ghi đè trạng thái không hợp lệ| Manager trả provisioning hoặc thiếu output | Transaction reject trước khi tạo file         |
-// | 6   | Mark failed                 | Lưu mã lỗi ổn định               | Gọi markDocumentFailed                         | Update status FAILED và failure code        |
+// Nhóm unit test cho TypeOrmUserDocumentWriterRepository: kiểm tra trạng thái provisioning, transaction ghi file và các invariant khi cập nhật.
+// | STT | Test case               | Mục đích                                 | Các bước làm                                                   | Kết quả mong đợi                                |
+// |-----|-------------------------|------------------------------------------|----------------------------------------------------------------|-------------------------------------------------|
+// | 1   | Tạo provisioning        | Ghi trạng thái trước khi copy file       | Repository save document mới; gọi createProvisioningDocument   | Trả UUID, status provisioning và chưa có output |
+// | 2   | Complete thành công     | Ghi StoredFile và chuyển READY nguyên tử | Transaction tạo file; cập nhật/reload document                 | Trả record READY có output và download URL      |
+// | 3   | Provisioning bị mất     | Rollback complete khi thiếu document     | Transaction tìm không thấy provisioning row                    | Transaction reject, không trả document giả      |
+// | 4   | Replace file thành công | Đổi reference và trả file cũ để cleanup  | Transaction lưu file mới, cập nhật document và xóa metadata cũ | Trả document mới cùng previousFile              |
+// | 5   | Đánh dấu thất bại       | Lưu failure code ổn định                 | Gọi markDocumentFailed với documentId/code                     | Cập nhật status FAILED và failureCode           |
+
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { OfficeTemplate } from '@/database/entities/office-template.entity';
 import { OfficeTemplateVersion } from '@/database/entities/office-template-version.entity';
@@ -76,12 +76,14 @@ describe('TypeOrmUserDocumentWriterRepository', () => {
         const result = await target.createProvisioningDocument(
             'version-1',
             'Resume',
+            'workspace-1',
         );
 
         // Bước 3 - Assert: ID được trả và entity lưu đúng trạng thái provisioning.
         expect(result).toBe('document-1');
         expect(mockUserDocuments.create).toHaveBeenCalledWith({
             sourceTemplateVersionId: 'version-1',
+            anonymousWorkspaceId: 'workspace-1',
             title: 'Resume',
             status: UserDocumentStatus.PROVISIONING,
             outputFileId: null,
@@ -245,6 +247,7 @@ describe('TypeOrmUserDocumentWriterRepository', () => {
         });
         mockManager.findOne
             .mockResolvedValueOnce(document)
+            .mockResolvedValueOnce(oldFile)
             .mockResolvedValueOnce(reloadedDocument);
         mockManager.save
             .mockResolvedValueOnce(savedFile)
@@ -278,6 +281,7 @@ describe('TypeOrmUserDocumentWriterRepository', () => {
             'documents/new.docx',
         );
         expect(result.document.sourceTemplate.name).toBe('Mẫu đã lưu trữ');
+        expect(document.outputFile).toBe(savedFile);
         expect(mockManager.delete).toHaveBeenCalledWith(StoredFile, 'old-file');
         expect(document.failureCode).toBeNull();
     });
