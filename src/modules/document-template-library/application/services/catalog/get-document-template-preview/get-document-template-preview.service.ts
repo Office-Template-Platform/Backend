@@ -5,7 +5,7 @@ import {
     DOCUMENT_TEMPLATE_READER,
     type DocumentTemplateReaderContract,
 } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
-import type { DocumentTemplatePreview } from '@/modules/document-template-library/application/types/document-template-preview';
+import type { DocumentTemplatePreview } from '@/modules/document-template-library/application/types/document-template-preview/document-template-preview';
 
 @Injectable()
 // Tách metadata file khỏi stream để storage key không xuất hiện trong response JSON.
