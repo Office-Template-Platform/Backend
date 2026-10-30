@@ -3,7 +3,9 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ApiExceptionFilter } from '@/http/filters/api-exception.filter';
 import { AppModule } from '@/bootstrap/api/app.module';
+import { ResponseEnvelopeInterceptor } from '@/http/interceptors/response-envelope.interceptor';
 
 // Tạo Nest app với hợp đồng request chặt và CORS giới hạn cho frontend local.
 export async function createApiApp() {
@@ -12,6 +14,8 @@ export async function createApiApp() {
     // Cho phép Nest hoàn tất cleanup khi process nhận tín hiệu dừng.
     app.enableShutdownHooks();
     app.setGlobalPrefix('api');
+    app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+    app.useGlobalFilters(new ApiExceptionFilter());
     app.enableCors({
         origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
     });
@@ -31,7 +35,10 @@ export async function createApiApp() {
         .setVersion('1.0')
         .build();
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('docs', app, swaggerDocument);
+    // Đặt Swagger dưới global prefix để UI luôn truy cập cùng namespace `/api` của service.
+    SwaggerModule.setup('docs', app, swaggerDocument, {
+        useGlobalPrefix: true,
+    });
 
     return app;
 }
