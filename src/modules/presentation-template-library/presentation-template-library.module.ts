@@ -8,6 +8,8 @@ import { ListPresentationTemplatesService } from '@/modules/presentation-templat
 import { ListPresentationTemplatesController } from '@/modules/presentation-template-library/presentation/controllers/presentation-templates/list-presentation-templates/list-presentation-templates.controller';
 import { ListPresentationTemplateCategoriesService } from '@/modules/presentation-template-library/application/services/catalog/list-presentation-template-categories/list-presentation-template-categories.service';
 import { ListPresentationTemplateCategoriesController } from '@/modules/presentation-template-library/presentation/controllers/presentation-templates/list-presentation-template-categories/list-presentation-template-categories.controller';
+import { GetPresentationTemplateService } from '@/modules/presentation-template-library/application/services/catalog/get-presentation-template/get-presentation-template.service';
+import { GetPresentationTemplateController } from '@/modules/presentation-template-library/presentation/controllers/presentation-templates/get-presentation-template/get-presentation-template.controller';
 import { TypeOrmPresentationTemplateReaderRepository } from '@/modules/presentation-template-library/infrastructure/repositories/read/presentation-templates/typeorm-presentation-template-reader.repository';
 
 @Module({
@@ -15,10 +17,12 @@ import { TypeOrmPresentationTemplateReaderRepository } from '@/modules/presentat
     controllers: [
         ListPresentationTemplatesController,
         ListPresentationTemplateCategoriesController,
+        GetPresentationTemplateController,
     ],
     providers: [
         ListPresentationTemplatesService,
         ListPresentationTemplateCategoriesService,
+        GetPresentationTemplateService,
         TypeOrmPresentationTemplateReaderRepository,
         {
             provide: PRESENTATION_TEMPLATE_READER,
