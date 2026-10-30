@@ -1,7 +1,8 @@
-// Nhóm unit test cho GetUserDocumentController: kiểm tra ID được chuyển tới use case đọc metadata.
-// | STT | Test case       | Mục đích                    | Các bước làm             | Kết quả mong đợi                |
-// |-----|-----------------|-----------------------------|--------------------------|---------------------------------|
-// | 1   | Tài liệu tồn tại | Trả summary tài liệu người dùng | Gọi detail với UUID | Trả nguyên summary và đúng ID    |
+// Nhóm unit test cho GetUserDocumentController: xác nhận document ID được ủy quyền đọc metadata.
+// | STT | Test case        | Mục đích                              | Các bước làm                          | Kết quả mong đợi                   |
+// |-----|------------------|---------------------------------------|---------------------------------------|------------------------------------|
+// | 1   | Tài liệu tồn tại | Trả summary của document được yêu cầu | Gọi get với UUID; service trả summary | Trả đúng summary và chuyển đúng ID |
+
 import type { UserDocumentSummary } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
 import { GetUserDocumentService } from '@/modules/document-template-library/application/services/user-documents/get-user-document/get-user-document.service';
 import { GetUserDocumentController } from '@/modules/document-template-library/presentation/controllers/user-documents/get-user-document/get-user-document.controller';
@@ -39,12 +40,12 @@ describe('GetUserDocumentController', () => {
         mockGetUserDocument.execute.mockResolvedValue(expected);
 
         // Bước 2 - Act: gọi endpoint GET /user-documents/:documentId.
-        const result = await target.detail('document-1');
+        const result = await target.detail('document-1', 'workspace-1');
 
         // Bước 3 - Assert: trả summary nguyên vẹn và truy vấn đúng UUID.
         expect(result).toEqual(expected);
         expect(mockGetUserDocument.execute.mock.calls).toEqual([
-            ['document-1'],
+            ['document-1', 'workspace-1'],
         ]);
     });
 });

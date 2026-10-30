@@ -14,12 +14,22 @@ export class GetUserDocumentService {
     // Adapter nạp liên kết file ở server nhưng response chỉ nhận summary.
     constructor(
         @Inject(USER_DOCUMENT_READER)
-        private readonly documentReader: UserDocumentReaderContract,
+        private readonly documentReader: Pick<
+            UserDocumentReaderContract,
+            'findUserDocumentByIdForWorkspace'
+        >,
     ) {}
 
     // 404 cho ID không tồn tại; không phân biệt soft-delete hay trạng thái nội bộ.
-    async execute(id: string): Promise<UserDocumentSummary> {
-        const document = await this.documentReader.findUserDocumentById(id);
+    async execute(
+        id: string,
+        workspaceId: string,
+    ): Promise<UserDocumentSummary> {
+        const document =
+            await this.documentReader.findUserDocumentByIdForWorkspace(
+                id,
+                workspaceId,
+            );
 
         if (!document) {
             throw new UserDocumentNotFoundError();

@@ -1,9 +1,10 @@
-// Nhóm unit test cho GetUserDocumentService: kiểm tra projection an toàn và trường hợp không tìm thấy.
-// | STT | Test case      | Mục đích                         | Các bước làm                         | Kết quả mong đợi                          |
-// |-----|----------------|----------------------------------|--------------------------------------|-------------------------------------------|
-// | 1   | Có tài liệu    | Trả metadata nhưng ẩn storage key| Reader trả record; gọi execute       | Summary không chứa outputFile             |
-// | 2   | Không có       | Báo tài liệu không tồn tại       | Reader trả null; gọi execute         | Ném UserDocumentNotFoundError            |
-// | 3   | Reader lỗi     | Giữ nguyên lỗi persistence       | Reader reject; gọi execute           | Promise reject đúng lỗi gốc                |
+// Nhóm unit test cho GetUserDocumentService: xác nhận metadata public không để lộ storage reference và xử lý lỗi reader.
+// | STT | Test case        | Mục đích                            | Các bước làm                             | Kết quả mong đợi                             |
+// |-----|------------------|-------------------------------------|------------------------------------------|----------------------------------------------|
+// | 1   | Tài liệu tồn tại | Trả summary công khai an toàn       | Reader trả record có output; gọi execute | Summary không chứa outputFile hoặc objectKey |
+// | 2   | Không tìm thấy   | Báo document ID không tồn tại       | Reader trả null; gọi execute             | Ném UserDocumentNotFoundError                |
+// | 3   | Reader gặp lỗi   | Không đổi lỗi persistence thành 404 | Reader reject; gọi execute               | Lỗi gốc được truyền lên                      |
+
 import type {
     UserDocumentReaderContract,
     UserDocumentRecord,
@@ -13,10 +14,12 @@ import { GetUserDocumentService } from '@/modules/document-template-library/appl
 
 describe('GetUserDocumentService', () => {
     let target: GetUserDocumentService;
-    let mockDocumentReader: jest.Mocked<UserDocumentReaderContract>;
+    let mockDocumentReader: jest.Mocked<
+        Pick<UserDocumentReaderContract, 'findUserDocumentByIdForWorkspace'>
+    >;
 
     beforeEach(() => {
-        mockDocumentReader = { findUserDocumentById: jest.fn() };
+        mockDocumentReader = { findUserDocumentByIdForWorkspace: jest.fn() };
         target = new GetUserDocumentService(mockDocumentReader);
     });
 
@@ -47,10 +50,12 @@ describe('GetUserDocumentService', () => {
             },
             sourceTemplate: { id: 'template-1', name: 'Resume', version: 2 },
         };
-        mockDocumentReader.findUserDocumentById.mockResolvedValue(record);
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue(
+            record,
+        );
 
         // Bước 2 - Act: yêu cầu metadata theo document id.
-        const result = await target.execute('document-1');
+        const result = await target.execute('document-1', 'workspace-1');
 
         // Bước 3 - Assert: summary chính xác và không lộ objectKey hay outputFile.
         expect(result).toEqual({
@@ -65,29 +70,35 @@ describe('GetUserDocumentService', () => {
         });
         expect(result).not.toHaveProperty('outputFile');
         expect(JSON.stringify(result)).not.toContain('private/secret.docx');
-        expect(mockDocumentReader.findUserDocumentById.mock.calls).toEqual([
-            ['document-1'],
-        ]);
+        expect(
+            mockDocumentReader.findUserDocumentByIdForWorkspace.mock.calls,
+        ).toEqual([['document-1', 'workspace-1']]);
     });
 
     // Test 2 bảo đảm id không tồn tại thành lỗi 404 thay vì trả null.
     it('should throw a not-found error when the document does not exist', async () => {
         // Bước 1 - Arrange: reader trả null cho UUID hợp lệ nhưng không có bản ghi.
-        mockDocumentReader.findUserDocumentById.mockResolvedValue(null);
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockResolvedValue(
+            null,
+        );
 
         // Bước 2 - Act và Bước 3 - Assert: use case ném lỗi not-found cụ thể.
-        await expect(target.execute('missing-id')).rejects.toBeInstanceOf(
-            UserDocumentNotFoundError,
-        );
+        await expect(
+            target.execute('missing-id', 'workspace-1'),
+        ).rejects.toBeInstanceOf(UserDocumentNotFoundError);
     });
 
     // Test 3 giữ lỗi database nguyên trạng để không nhầm với tài liệu vắng mặt.
     it('should propagate reader failures without changing the error', async () => {
         // Bước 1 - Arrange: adapter reject do sự cố persistence.
         const failure = new Error('database unavailable');
-        mockDocumentReader.findUserDocumentById.mockRejectedValue(failure);
+        mockDocumentReader.findUserDocumentByIdForWorkspace.mockRejectedValue(
+            failure,
+        );
 
         // Bước 2 - Act và Bước 3 - Assert: lỗi gốc không bị ánh xạ thành 404.
-        await expect(target.execute('document-1')).rejects.toBe(failure);
+        await expect(target.execute('document-1', 'workspace-1')).rejects.toBe(
+            failure,
+        );
     });
 });
