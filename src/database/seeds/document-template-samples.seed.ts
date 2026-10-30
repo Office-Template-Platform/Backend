@@ -26,6 +26,9 @@ const categories = [
     { name: 'Bản ghi nhớ', slug: 'ban-ghi-nho', sortOrder: 20 },
     { name: 'Ứng tuyển', slug: 'ung-tuyen', sortOrder: 30 },
     { name: 'Sự kiện', slug: 'su-kien', sortOrder: 40 },
+    { name: 'Báo cáo', slug: 'bao-cao', sortOrder: 50 },
+    { name: 'Kinh doanh', slug: 'kinh-doanh', sortOrder: 60 },
+    { name: 'Giáo dục', slug: 'giao-duc', sortOrder: 70 },
 ] as const;
 
 const templates = [
@@ -79,6 +82,48 @@ const templates = [
         categorySlug: 'su-kien',
         sourceKey: 'document-templates/Tờ bướm mời dự tiệc/file.docx',
         previewKey: 'document-templates/Tờ bướm mời dự tiệc/preview.webp',
+        featured: true,
+    },
+    {
+        name: 'Báo cáo',
+        slug: 'bao-cao',
+        description:
+            'Mẫu báo cáo có bố cục rõ ràng để trình bày nội dung, số liệu và kết luận.',
+        categorySlug: 'bao-cao',
+        sourceKey: 'document-templates/Báo cáo/file.docx',
+        previewKey: 'document-templates/Báo cáo/preview.webp',
+        featured: true,
+    },
+    {
+        name: 'Hóa đơn dịch vụ',
+        slug: 'hoa-don-dich-vu',
+        description:
+            'Mẫu hóa đơn dịch vụ để ghi thông tin khách hàng, hạng mục và tổng thanh toán.',
+        categorySlug: 'kinh-doanh',
+        sourceKey: 'document-templates/Hóa đơn dịch vụ/file.docx',
+        previewKey: 'document-templates/Hóa đơn dịch vụ/preview.webp',
+        featured: false,
+    },
+    {
+        name: 'Lịch công tác Hội phụ huynh giáo viên',
+        slug: 'lich-cong-tac-hoi-phu-huynh-giao-vien',
+        description:
+            'Mẫu lịch công tác để phối hợp hoạt động giữa hội phụ huynh và giáo viên.',
+        categorySlug: 'giao-duc',
+        sourceKey:
+            'document-templates/Lịch công tác Hội phụ huynh giáo viên/file.docx',
+        previewKey:
+            'document-templates/Lịch công tác Hội phụ huynh giáo viên/preview.webp',
+        featured: false,
+    },
+    {
+        name: 'Phiếu quà tặng ngày lễ',
+        slug: 'phieu-qua-tang-ngay-le',
+        description:
+            'Mẫu phiếu quà tặng ngày lễ có thể cá nhân hóa cho chương trình tri ân.',
+        categorySlug: 'su-kien',
+        sourceKey: 'document-templates/Phiếu quà tặng ngày lễ/file.docx',
+        previewKey: 'document-templates/Phiếu quà tặng ngày lễ/preview.webp',
         featured: true,
     },
 ] as const;
@@ -339,6 +384,18 @@ async function seedDocumentTemplates(resetRequested: boolean): Promise<void> {
                         isActive: true,
                     });
                     category = await categoryRepository.save(category);
+                } else if (
+                    category.name !== categorySeed.name ||
+                    category.sortOrder !== categorySeed.sortOrder ||
+                    !category.isActive
+                ) {
+                    // Đồng bộ lại danh mục seed để các danh mục mới được dùng ngay cả khi DB từng lưu trạng thái cũ.
+                    category = await categoryRepository.save(
+                        categoryRepository.merge(category, {
+                            ...categorySeed,
+                            isActive: true,
+                        }),
+                    );
                 }
 
                 categoriesBySlug.set(category.slug, category);
