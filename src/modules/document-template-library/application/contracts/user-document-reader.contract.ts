@@ -1,6 +1,12 @@
 // Contract đọc metadata tài liệu người dùng; output file nội bộ chỉ được dùng ở server boundary.
 import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
 
+export type UserDocumentListQuery = {
+    page: number;
+    limit: number;
+    search?: string;
+};
+
 export type UserDocumentRecord = {
     id: string;
     title: string;
@@ -22,6 +28,14 @@ export type UserDocumentSummary = Omit<UserDocumentRecord, 'outputFile'>;
 // Reader nạp source-template snapshot và output reference để giữ metadata sau khi mẫu bị archive.
 export interface UserDocumentReaderContract {
     findUserDocumentById(id: string): Promise<UserDocumentRecord | null>;
+    findUserDocumentByIdForWorkspace(
+        id: string,
+        workspaceId: string,
+    ): Promise<UserDocumentRecord | null>;
+    listUserDocumentsByWorkspace(
+        workspaceId: string,
+        query: UserDocumentListQuery,
+    ): Promise<{ items: UserDocumentRecord[]; total: number }>;
 }
 
 export const USER_DOCUMENT_READER = Symbol('USER_DOCUMENT_READER');

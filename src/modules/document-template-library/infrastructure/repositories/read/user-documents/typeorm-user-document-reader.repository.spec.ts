@@ -1,9 +1,12 @@
-// Nhóm unit test cho TypeOrmUserDocumentReaderRepository: kiểm tra relations, record mapping và trạng thái missing.
-// | STT | Test case       | Mục đích                           | Các bước làm                         | Kết quả mong đợi                           |
-// |-----|-----------------|------------------------------------|--------------------------------------|--------------------------------------------|
-// | 1   | Record tồn tại  | Nạp file và map metadata           | findOne trả entity; gọi reader       | Record có summary và output file đúng      |
-// | 2   | Record thiếu    | Để application xử lý 404          | findOne trả null                     | Reader trả null                            |
-// | 3   | Lỗi database    | Giữ nguyên lỗi persistence         | findOne reject                       | Promise reject đúng lỗi gốc                |
+// Nhóm unit test cho TypeOrmUserDocumentReaderRepository: kiểm tra mapping, giới hạn workspace, claim legacy và pagination.
+// | STT | Test case              | Mục đích                             | Các bước làm                                      | Kết quả mong đợi                       |
+// |-----|------------------------|--------------------------------------|---------------------------------------------------|----------------------------------------|
+// | 1   | Document tồn tại       | Nạp output và source version         | findOne trả entity có relations; gọi reader       | Record map đủ metadata và file         |
+// | 2   | Document không tồn tại | Để application quyết định lỗi 404     | findOne trả null; gọi reader                      | Reader trả null                        |
+// | 3   | Database lỗi           | Không đổi lỗi repository               | findOne reject; gọi reader                        | Lỗi gốc được truyền lên                |
+// | 4   | Legacy chưa có owner   | Claim tài liệu an toàn cho workspace | UPDATE có điều kiện; đọc lại theo workspace       | Chỉ workspace thắng claim được đọc     |
+// | 5   | Danh sách có tìm kiếm  | Giữ owner, sort và phân trang         | Query theo workspace và title                     | SQL lọc đúng owner và offset           |
+
 import { Repository } from 'typeorm';
 import { OfficeTemplate } from '@/database/entities/office-template.entity';
 import { OfficeTemplateVersion } from '@/database/entities/office-template-version.entity';
@@ -16,10 +19,13 @@ describe('TypeOrmUserDocumentReaderRepository', () => {
     let target: TypeOrmUserDocumentReaderRepository;
     let mockUserDocuments: jest.Mocked<
         Pick<Repository<UserDocument>, 'findOne'>
-    >;
+    > & { createQueryBuilder: jest.Mock };
 
     beforeEach(() => {
-        mockUserDocuments = { findOne: jest.fn() };
+        mockUserDocuments = {
+            findOne: jest.fn(),
+            createQueryBuilder: jest.fn(),
+        };
         target = new TypeOrmUserDocumentReaderRepository(
             mockUserDocuments as unknown as Repository<UserDocument>,
         );
@@ -121,5 +127,102 @@ describe('TypeOrmUserDocumentReaderRepository', () => {
         await expect(target.findUserDocumentById('document-1')).rejects.toBe(
             failure,
         );
+    });
+
+    // Test 4 claim legacy document bằng UPDATE có điều kiện để hai workspace không thể cùng nhận quyền.
+    it('should claim an unowned legacy document only for the requesting workspace', async () => {
+        // Bước 1 - Arrange: query builder mô phỏng UPDATE owner nếu cột hiện còn NULL.
+        const queryBuilder = {
+            update: jest.fn().mockReturnThis(),
+            set: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            execute: jest.fn().mockResolvedValue({ affected: 1 }),
+        };
+        mockUserDocuments.createQueryBuilder.mockReturnValue(queryBuilder);
+        const document = Object.assign(new UserDocument(), {
+            id: 'document-4',
+            title: 'Old report',
+            status: UserDocumentStatus.READY,
+            failureCode: null,
+            outputFileId: null,
+            outputFile: null,
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+            sourceTemplateVersion: Object.assign(new OfficeTemplateVersion(), {
+                templateId: 'template-1',
+                versionNumber: 1,
+                template: Object.assign(new OfficeTemplate(), {
+                    name: 'Archived report',
+                }),
+            }),
+        });
+        mockUserDocuments.findOne.mockResolvedValue(document);
+
+        // Bước 2 - Act: mở tài liệu cũ trong workspace mới được cấp.
+        const result = await target.findUserDocumentByIdForWorkspace(
+            'document-4',
+            'workspace-4',
+        );
+
+        // Bước 3 - Assert: UPDATE chỉ claim row chưa có owner, rồi đọc lại với điều kiện owner.
+        expect(result).toMatchObject({ id: 'document-4', title: 'Old report' });
+        expect(queryBuilder.update).toHaveBeenCalledWith(UserDocument);
+        expect(queryBuilder.set).toHaveBeenCalledWith({
+            anonymousWorkspaceId: 'workspace-4',
+        });
+        expect(queryBuilder.where).toHaveBeenCalledWith('id = :id', {
+            id: 'document-4',
+        });
+        expect(queryBuilder.andWhere).toHaveBeenNthCalledWith(
+            1,
+            'anonymous_workspace_id IS NULL',
+        );
+        expect(mockUserDocuments.findOne).toHaveBeenCalledWith({
+            where: { id: 'document-4', anonymousWorkspaceId: 'workspace-4' },
+            relations: {
+                outputFile: true,
+                sourceTemplateVersion: { template: true },
+            },
+        });
+    });
+
+    // Test 5 kiểm tra tìm kiếm và phân trang được áp dụng sau điều kiện owner bắt buộc.
+    it('should filter and paginate only the current workspace documents', async () => {
+        // Bước 1 - Arrange: builder thu query và trả page rỗng cùng tổng matching record.
+        const queryBuilder = {
+            leftJoinAndSelect: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            orderBy: jest.fn().mockReturnThis(),
+            addOrderBy: jest.fn().mockReturnThis(),
+            skip: jest.fn().mockReturnThis(),
+            take: jest.fn().mockReturnThis(),
+            getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        };
+        mockUserDocuments.createQueryBuilder.mockReturnValue(queryBuilder);
+
+        // Bước 2 - Act: tìm kiếm trong trang 2 của workspace được xác thực.
+        const result = await target.listUserDocumentsByWorkspace(
+            'workspace-5',
+            { page: 2, limit: 10, search: '  report  ' },
+        );
+
+        // Bước 3 - Assert: mọi điều kiện SQL đều giữ workspace boundary và offset chính xác.
+        expect(result).toEqual({ items: [], total: 0 });
+        expect(queryBuilder.where).toHaveBeenCalledWith(
+            'document.anonymousWorkspaceId = :workspaceId',
+            { workspaceId: 'workspace-5' },
+        );
+        expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+            'document.title ILIKE :search',
+            { search: '%report%' },
+        );
+        expect(queryBuilder.orderBy).toHaveBeenCalledWith(
+            'document.updatedAt',
+            'DESC',
+        );
+        expect(queryBuilder.skip).toHaveBeenCalledWith(10);
+        expect(queryBuilder.take).toHaveBeenCalledWith(10);
     });
 });
