@@ -67,7 +67,7 @@ services:
     api:
         # Service: NestJS HTTP API; Port: API_HOST_PORT trên host → PORT trong container.
         # Vai trò: phục vụ thư viện mẫu DOCX/PPTX; health check gọi /api/health.
-        # Kết nối: PostgreSQL qua DNS `postgres`; file tài liệu đầu ra ở named volume riêng.
+        # Kết nối: PostgreSQL qua DNS `postgres`; file đầu ra bind mount từ api/storage trên host.
         container_name: ${API_CONTAINER_NAME:?Set API_CONTAINER_NAME in api/.env}
         image: ${API_IMAGE:?Set API_IMAGE in api/.env}
         build:
@@ -95,7 +95,7 @@ services:
         ports:
             - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${API_HOST_PORT:?Set API_HOST_PORT in api/.env}:${PORT:?Set PORT in api/.env}'
         volumes:
-            - office-template-api-file-storage:/app/storage
+            - ${FILE_STORAGE_ROOT:?Set FILE_STORAGE_ROOT in api/.env}:/app/storage
         depends_on:
             migrate:
                 condition: service_completed_successfully
@@ -154,9 +154,6 @@ volumes:
         name: ${DB_VOLUME_NAME:?Set DB_VOLUME_NAME in api/.env}
         # Volume external giúp project mới gắn lại đúng database local đang có.
         external: true
-    office-template-api-file-storage:
-        name: ${FILE_STORAGE_VOLUME_NAME:?Set FILE_STORAGE_VOLUME_NAME in api/.env}
-        # Giữ file DOCX/PPTX người dùng tạo qua lần recreate hoặc cập nhật API container.
     office-template-onlyoffice-logs:
         # Lưu log Docs Server qua lần recreate để tiện xem lỗi editor/callback.
     office-template-onlyoffice-data:
