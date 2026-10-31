@@ -5,14 +5,14 @@ import {
     DOCUMENT_FILE_STORAGE,
     type DocumentFileStorageContract,
     type StoredFileReference,
-} from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+} from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
 import {
     USER_DOCUMENT_WRITER,
     type UserDocumentWriterContract,
-} from '@/modules/document-template-library/application/contracts/user-document-writer.contract';
-import type { UserDocumentSummary } from '@/modules/document-template-library/application/contracts/user-document-reader.contract';
-import { toUserDocumentSummary } from '@/modules/document-template-library/application/utils/to-user-document-summary';
-import { OFFICE_DOCUMENT_FORMATS } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
+} from '@/modules/user-document-management/application/contracts/user-document-writer.contract';
+import type { UserDocumentSummary } from '@/modules/user-document-management/application/contracts/user-document-reader.contract';
+import { toUserDocumentSummary } from '@/modules/user-document-management/application/utils/to-user-document-summary';
+import { OFFICE_DOCUMENT_FORMATS } from '@/modules/document-file-storage/application/types/office-document-format/office-document-format';
 import {
     PRESENTATION_TEMPLATE_READER,
     type PresentationTemplateReaderContract,

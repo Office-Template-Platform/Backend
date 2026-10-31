@@ -7,8 +7,8 @@
 // | 4   | Complete lỗi           | Dọn file mới và giữ nguồn bất biến        | Copy thành công; writer complete reject               | Xóa file user, đánh dấu FAILED, ném lỗi ổn định   |
 
 import { Logger } from '@nestjs/common';
-import type { DocumentFileStorageContract } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
-import type { UserDocumentWriterContract } from '@/modules/document-template-library/application/contracts/user-document-writer.contract';
+import type { DocumentFileStorageContract } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
+import type { UserDocumentWriterContract } from '@/modules/user-document-management/application/contracts/user-document-writer.contract';
 import type { PresentationTemplateReaderContract } from '@/modules/presentation-template-library/application/contracts/presentation-template-reader.contract';
 import { PresentationCreationFailedError } from '@/modules/presentation-template-library/application/errors/presentation-creation-failed.error';
 import { PresentationTemplateNotFoundError } from '@/modules/presentation-template-library/application/errors/presentation-template-not-found.error';
@@ -34,7 +34,7 @@ describe('CreateUserPresentationService', () => {
     };
     const outputFile = {
         ...sourceFile,
-        storageNamespace: 'user-documents',
+        storageNamespace: 'user-presentations',
         objectKey: 'documents/new-copy.pptx',
         originalFilename: 'Bài thuyết trình.pptx',
         sha256: 'output-hash',

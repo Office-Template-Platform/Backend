@@ -18,8 +18,8 @@ import type {
     DocumentTemplateSource,
     PagedDocumentTemplates,
 } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
-import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
-import { toStoredFileReference } from '@/modules/document-template-library/infrastructure/repositories/mappers/document-template-record.mapper';
+import type { StoredFileReference } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
+import { toStoredFileReference } from '@/modules/document-file-storage/infrastructure/mappers/stored-file-reference.mapper';
 
 @Injectable()
 // Adapter giữ mọi truy vấn, join, sort và pagination của catalog trong PostgreSQL.

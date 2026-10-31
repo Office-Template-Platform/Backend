@@ -6,7 +6,7 @@
 // | 3   | Không có preview | Báo ảnh slide không tồn tại  | Reader trả null; gọi execute         | Ném PresentationTemplatePreviewNotFoundError |
 
 import { BadRequestException } from '@nestjs/common';
-import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+import type { StoredFileReference } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
 import type { PresentationTemplateReaderContract } from '@/modules/presentation-template-library/application/contracts/presentation-template-reader.contract';
 import { PresentationTemplatePreviewNotFoundError } from '@/modules/presentation-template-library/application/errors/presentation-template-preview-not-found.error';
 import { GetPresentationSlidePreviewService } from '@/modules/presentation-template-library/application/services/catalog/get-presentation-slide-preview/get-presentation-slide-preview.service';

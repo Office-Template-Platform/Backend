@@ -4,7 +4,7 @@
 // | 1   | Có thumbnail    | Trả file reference cho stream  | Reader trả file; gọi execute     | Trả reference không lộ path ra ngoài         |
 // | 2   | Thiếu thumbnail | Báo preview không tồn tại      | Reader trả null; gọi execute     | Ném PresentationTemplatePreviewNotFoundError |
 
-import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+import type { StoredFileReference } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
 import type { PresentationTemplateReaderContract } from '@/modules/presentation-template-library/application/contracts/presentation-template-reader.contract';
 import { PresentationTemplatePreviewNotFoundError } from '@/modules/presentation-template-library/application/errors/presentation-template-preview-not-found.error';
 import { GetPresentationTemplatePreviewService } from '@/modules/presentation-template-library/application/services/catalog/get-presentation-template-preview/get-presentation-template-preview.service';

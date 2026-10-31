@@ -1,5 +1,5 @@
 // Contract đọc catalog mẫu; mọi filter, join và pagination được adapter thực hiện trong database.
-import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+import type { StoredFileReference } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
 
 export type DocumentTemplateFilters = {
     page: number;

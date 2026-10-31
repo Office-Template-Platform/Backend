@@ -5,7 +5,7 @@
 // | 2   | Thiếu preview   | Báo không tìm thấy thumbnail            | Reader trả null; gọi execute           | Ném DocumentTemplatePreviewNotFoundError |
 // | 3   | Reader gặp lỗi  | Giữ nguyên lỗi hạ tầng                  | Reader reject; gọi execute             | Lỗi gốc được truyền lên                  |
 
-import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+import type { StoredFileReference } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
 import type { DocumentTemplateReaderContract } from '@/modules/document-template-library/application/contracts/document-template-reader.contract';
 import { DocumentTemplatePreviewNotFoundError } from '@/modules/document-template-library/application/errors/document-template-preview-not-found.error';
 import { GetDocumentTemplatePreviewService } from '@/modules/document-template-library/application/services/catalog/get-document-template-preview/get-document-template-preview.service';

@@ -14,7 +14,7 @@ import type {
     OnlyOfficeEditorConfigResponse,
     OnlyOfficeFileAccessClaims,
 } from '@/integrations/onlyoffice/types/onlyoffice-docs.types';
-import type { OfficeDocumentExtension } from '@/modules/document-template-library/application/types/office-document-format/office-document-format';
+import type { OfficeDocumentExtension } from '@/modules/document-file-storage/application/types/office-document-format/office-document-format';
 
 const MAX_EDITED_OFFICE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 

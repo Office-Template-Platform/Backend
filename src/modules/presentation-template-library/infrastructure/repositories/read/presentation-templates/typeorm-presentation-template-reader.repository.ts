@@ -13,13 +13,13 @@ import type {
     PresentationTemplateSource,
     PresentationTemplateFilters,
 } from '@/modules/presentation-template-library/application/contracts/presentation-template-reader.contract';
-import type { StoredFileReference } from '@/modules/document-template-library/application/contracts/document-file-storage.contract';
+import type { StoredFileReference } from '@/modules/document-file-storage/application/contracts/document-file-storage.contract';
 import type {
     PresentationTemplateCategory,
     PresentationTemplateDetail,
     PresentationTemplateSummary,
 } from '@/modules/presentation-template-library/application/types/presentation-template-summary';
-import { toStoredFileReference } from '@/modules/document-template-library/infrastructure/repositories/mappers/document-template-record.mapper';
+import { toStoredFileReference } from '@/modules/document-file-storage/infrastructure/mappers/stored-file-reference.mapper';
 
 @Injectable()
 // Adapter chỉ đọc dữ liệu; query luôn khóa theo product type, published status và category đang hoạt động.
