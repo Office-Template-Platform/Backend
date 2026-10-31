@@ -12,7 +12,7 @@
 // | 9   | Callback hợp lệ                   | Xác thực token và body callback               | Verifier trả payload đã ký khớp; gọi verifyCallback            | Hoàn tất và chỉ xác minh phần token sau Bearer        |
 // | 10  | Chữ ký callback sai               | Từ chối JWT callback không hợp lệ             | Verifier từ chối JWT; gọi verifyCallback                       | Ném UnauthorizedException                            |
 // | 11  | Claims callback không khớp         | Chặn body bị sửa hoặc token sai operation     | Verifier trả claims không khớp body; gọi verifyCallback        | Ném UnauthorizedException                            |
-// | 12  | URL tải hợp lệ                    | Chỉ tải từ origin Document Server cấu hình    | Fetch trả stream DOCX; gọi downloadEditedDocument              | Ghép stream thành Buffer và chặn redirect             |
+// | 12  | URL tải public/internal           | Đổi đúng host và port Docker khi fetch         | Callback dùng port public; gọi downloadEditedDocument           | Giữ path/query, tải qua port nội bộ và ghép Buffer    |
 // | 13  | URL tải không được phép           | Chặn URL sai protocol, origin hoặc credentials| Gọi downloadEditedDocument với URL không an toàn               | Ném BadGatewayException, không gọi fetch              |
 // | 14  | Fetch thất bại                    | Chuẩn hóa lỗi kết nối Document Server         | Fetch reject; gọi downloadEditedDocument                       | Ném BadGatewayException                              |
 // | 15  | Response không có file            | Từ chối HTTP lỗi hoặc body rỗng               | Fetch trả response lỗi/body null; gọi downloadEditedDocument   | Ném BadGatewayException                              |
@@ -422,11 +422,19 @@ describe('OnlyOfficeDocsService', () => {
 
     // Test 12: chỉ origin cấu hình được tải, response stream được ghép nguyên thứ tự và không theo redirect.
     it.each([
-        ['internal', 'http://onlyoffice:8080/cache/result.docx'],
-        ['public', 'https://docs.example.test/cache/result.docx'],
+        [
+            'internal',
+            'http://onlyoffice:8080/cache/result.docx',
+            'http://onlyoffice:8080/cache/result.docx',
+        ],
+        [
+            'public',
+            'https://docs.example.test/cache/result.docx?md5=signed-value',
+            'http://onlyoffice:8080/cache/result.docx?md5=signed-value',
+        ],
     ])(
-        'should download and combine a DOCX from the configured %s origin',
-        async (_originName, fileUrl) => {
+        'should download a DOCX from the configured %s origin using a reachable URL',
+        async (_originName, fileUrl, expectedFetchUrl) => {
             // Bước 1 - Arrange: Document Server trả file thành nhiều chunk.
             const firstChunk = Buffer.from('docx-part-1');
             const secondChunk = Buffer.from('-part-2');
@@ -435,18 +443,42 @@ describe('OnlyOfficeDocsService', () => {
                 .spyOn(globalThis, 'fetch')
                 .mockResolvedValue(response);
 
-            // Bước 2 - Act: tải file callback từ một trong hai origin đã cấu hình.
+            // Bước 2 - Act: URL callback public phải được chuyển sang origin nội bộ trước khi gọi fetch.
             const result = await target.downloadEditedDocument(fileUrl);
 
-            // Bước 3 - Assert: trả nguyên bytes và yêu cầu fetch không tự theo redirect.
+            // Bước 3 - Assert: giữ path/query, trả nguyên bytes và không tự theo redirect.
             expect(result).toEqual(Buffer.concat([firstChunk, secondChunk]));
-            expect(fetchMock.mock.calls[0]?.[0]).toEqual(new URL(fileUrl));
+            expect(fetchMock.mock.calls[0]?.[0]).toEqual(
+                new URL(expectedFetchUrl),
+            );
             expect(fetchMock.mock.calls[0]?.[1]?.redirect).toBe('manual');
             expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(
                 AbortSignal,
             );
         },
     );
+
+    // Test 12 bổ sung: bỏ port publish 8082 và dùng port 80 bên trong Docker khi chuyển URL public.
+    it('should replace the published Docs Server port with the internal Docker port', async () => {
+        // Bước 1 - Arrange: browser URL dùng host port 8082, còn API nối tới service port 80.
+        process.env.ONLYOFFICE_PUBLIC_URL = 'http://localhost:8082';
+        process.env.ONLYOFFICE_INTERNAL_URL = 'http://onlyoffice:80';
+        const response = createDownloadResponse([Buffer.from('saved-docx')]);
+        const fetchMock = jest
+            .spyOn(globalThis, 'fetch')
+            .mockResolvedValue(response);
+
+        // Bước 2 - Act: tải URL callback có cùng origin public và query chữ ký.
+        const result = await target.downloadEditedDocument(
+            'http://localhost:8082/cache/result.docx?md5=signed-value',
+        );
+
+        // Bước 3 - Assert: fetch dùng hostname/port container, giữ nguyên path/query và bytes.
+        expect(fetchMock.mock.calls[0]?.[0]).toEqual(
+            new URL('http://onlyoffice/cache/result.docx?md5=signed-value'),
+        );
+        expect(result).toEqual(Buffer.from('saved-docx'));
+    });
 
     // Test 13: URL sai, ngoài origin, protocol hoặc có credentials đều bị chặn trước network call.
     it.each([

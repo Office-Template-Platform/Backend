@@ -89,8 +89,8 @@ services:
             DB_SSL: ${DB_SSL:?Set DB_SSL in api/.env}
             DB_LOGGING: ${DB_LOGGING:?Set DB_LOGGING in api/.env}
             ONLYOFFICE_PUBLIC_URL: ${ONLYOFFICE_PUBLIC_URL:?Set ONLYOFFICE_PUBLIC_URL in api/.env}
-            ONLYOFFICE_INTERNAL_URL: http://onlyoffice
-            ONLYOFFICE_API_INTERNAL_URL: http://api:${PORT:?Set PORT in api/.env}/api
+            ONLYOFFICE_INTERNAL_URL: ${ONLYOFFICE_INTERNAL_URL_DOCKER:?Set ONLYOFFICE_INTERNAL_URL_DOCKER in api/.env}
+            ONLYOFFICE_API_INTERNAL_URL: ${ONLYOFFICE_API_INTERNAL_URL_DOCKER:?Set ONLYOFFICE_API_INTERNAL_URL_DOCKER in api/.env}
             ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?Set ONLYOFFICE_JWT_SECRET in api/.env}
         ports:
             - '${CONTAINER_BIND_ADDRESS:?Set CONTAINER_BIND_ADDRESS in api/.env}:${API_HOST_PORT:?Set API_HOST_PORT in api/.env}:${PORT:?Set PORT in api/.env}'
@@ -100,7 +100,8 @@ services:
             migrate:
                 condition: service_completed_successfully
             onlyoffice:
-                condition: service_started
+                # Chỉ khởi động API sau khi Docs Server phản hồi healthcheck trên cổng nội bộ 80.
+                condition: service_healthy
         healthcheck:
             test:
                 [

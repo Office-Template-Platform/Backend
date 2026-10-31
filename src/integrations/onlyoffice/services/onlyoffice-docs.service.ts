@@ -1,7 +1,8 @@
-// Tạo cấu hình editor, ký URL tải file và xác minh giao tiếp với Document Server.
+// Adapter ONLYOFFICE ký cấu hình, xác minh callback và tải file kết quả; persistence do use case/storage sở hữu.
 import {
     BadGatewayException,
     Injectable,
+    Logger,
     PayloadTooLargeException,
     ServiceUnavailableException,
     UnauthorizedException,
@@ -21,6 +22,8 @@ const MAX_EDITED_OFFICE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 @Injectable()
 // Adapter ứng dụng cho ONLYOFFICE Docs; giữ secret, URL mạng và định dạng JWT ở backend.
 export class OnlyOfficeDocsService {
+    private readonly logger = new Logger(OnlyOfficeDocsService.name);
+
     constructor(private readonly jwtService: JwtService) {}
 
     // Bước 1 đọc cấu hình; thiếu URL hoặc JWT secret thì dừng trước khi phát hành token.
@@ -194,10 +197,10 @@ export class OnlyOfficeDocsService {
         }
     }
 
-    // Bước 1 parse URL và kiểm tra protocol, origin allowlist, userinfo trước khi tạo request mạng.
-    // Bước 2 gọi trực tiếp không theo redirect và có timeout để URL chuyển hướng không vượt allowlist.
-    // Bước 3 chặn file quá lớn bằng Content-Length nếu có, đồng thời kiểm tra lại từng chunk khi stream.
-    // Lỗi upstream được chuẩn hóa thành 502; file Office vượt giới hạn vẫn giữ 413.
+    // Bước 1 parse URL rồi xác thực protocol, origin allowlist và userinfo trước khi tạo request mạng.
+    // Bước 2 đổi origin public sang origin nội bộ cho API chạy trong Docker; path và query ký sẵn được giữ nguyên.
+    // Bước 3 gọi không theo redirect, có timeout và giới hạn kích thước cả qua header lẫn từng chunk.
+    // Lỗi upstream thành 502; file quá lớn giữ 413 để caller phân biệt được nguyên nhân.
     async downloadEditedDocument(fileUrl: string): Promise<Buffer> {
         const settings = this.getSettings();
         let target: URL;
@@ -211,10 +214,13 @@ export class OnlyOfficeDocsService {
             );
         }
 
-        // So sánh chính xác origin public/internal để ONLYOFFICE không thể khiến API tải URL tùy ý.
+        // Chỉ hai origin này hợp lệ: public cho callback có URL trình duyệt nhìn thấy,
+        // internal cho URL mà container API có thể phân giải qua network Compose.
+        const publicServerUrl = new URL(settings.publicUrl);
+        const internalServerUrl = new URL(settings.internalUrl);
         const allowedOrigins = new Set([
-            new URL(settings.internalUrl).origin,
-            new URL(settings.publicUrl).origin,
+            internalServerUrl.origin,
+            publicServerUrl.origin,
         ]);
         // Từ chối protocol lạ, origin ngoài cấu hình và URL có credentials trước khi fetch.
         if (
@@ -228,14 +234,39 @@ export class OnlyOfficeDocsService {
             );
         }
 
+        // Callback thường trả localhost:8082, là cổng host chứ không phải cổng bên trong mạng Docker.
+        // URL.host giữ port cũ nếu giá trị mới không ghi port; vì vậy phải thay scheme, hostname và port riêng.
+        // Path/query chứa chữ ký file được giữ nguyên để Document Server vẫn trả đúng bản đã lưu.
+        const downloadTarget = new URL(target);
+        if (downloadTarget.origin === publicServerUrl.origin) {
+            downloadTarget.protocol = internalServerUrl.protocol;
+            downloadTarget.hostname = internalServerUrl.hostname;
+            downloadTarget.port = internalServerUrl.port;
+        }
+
         // Manual redirect giữ nguyên ranh giới allowlist; timeout giới hạn thời gian chờ dịch vụ ngoài.
         let response: Response;
         try {
-            response = await fetch(target, {
+            response = await fetch(downloadTarget, {
                 signal: AbortSignal.timeout(30_000),
                 redirect: 'manual',
             });
-        } catch {
+        } catch (error) {
+            // Chỉ ghi origin và mã lỗi mạng; không ghi path/query vì URL callback chứa chữ ký file tạm thời.
+            const cause = error instanceof Error ? error.cause : undefined;
+            const networkCode =
+                typeof cause === 'object' &&
+                cause !== null &&
+                'code' in cause &&
+                typeof cause.code === 'string'
+                    ? cause.code
+                    : error instanceof Error
+                      ? error.name
+                      : 'UnknownError';
+            this.logger.error(
+                `Không kết nối được tới ONLYOFFICE origin ${downloadTarget.origin}; mã lỗi mạng: ${networkCode}.`,
+            );
+
             throw new BadGatewayException(
                 'Không kết nối được tới file kết quả của ONLYOFFICE.',
             );
