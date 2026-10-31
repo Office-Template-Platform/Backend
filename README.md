@@ -17,6 +17,8 @@ API cho hai thư viện mẫu văn bản và mẫu trình chiếu.
 
 - [Tổng quan](#tổng-quan)
 - [Công nghệ](#công-nghệ)
+- [Thư viện bên thứ ba và giấy phép](#thư-viện-bên-thứ-ba-và-giấy-phép)
+- [Khai báo sử dụng AI](#khai-báo-sử-dụng-ai)
 - [Chạy backend bằng Docker Compose](#chạy-backend-bằng-docker-compose)
 - [Chạy API trên máy phát triển](#chạy-api-trên-máy-phát-triển)
 - [API hiện có](#api-hiện-có)
@@ -56,6 +58,29 @@ Các phiên bản dưới đây đối chiếu với `package.json`, `.env.examp
 | Unit test  | Jest `^30`                                            | Kiểm tra service, repository, storage và seed               |
 
 Backend dùng TypeORM với PostgreSQL; `synchronize` luôn tắt. Entity nằm trong `src/database/entities`, enum persistence trong `src/database/enums`, migration trong `src/database/migrations`. Thay đổi schema phải đi qua migration đã review.
+
+## Thư viện bên thứ ba và giấy phép
+
+Danh sách gồm dependency trực tiếp của API trong `dependencies` và `devDependencies`. Giấy phép lấy từ metadata của phiên bản đã cài; `package-lock.json` khóa phiên bản sử dụng. Dependency bắc cầu không liệt kê riêng ở đây.
+
+### Runtime
+
+- **MIT:** `@nestjs/bullmq`, `@nestjs/common`, `@nestjs/core`, `@nestjs/jwt`, `@nestjs/platform-express`, `@nestjs/swagger`, `@nestjs/typeorm`, `bullmq`, `class-transformer`, `class-validator`, `ioredis`, `pg`, `swagger-ui-express`, `typeorm`.
+- **Apache-2.0:** `reflect-metadata`, `rxjs`.
+
+### Công cụ phát triển và kiểm thử
+
+- **MIT:** `@eslint/eslintrc`, `@eslint/js`, `@nestjs/cli`, `@nestjs/schematics`, `@nestjs/testing`, `@types/express`, `@types/jest`, `@types/node`, `@types/pg`, `@types/supertest`, `@types/swagger-ui-express`, `eslint`, `eslint-config-prettier`, `eslint-plugin-prettier`, `globals`, `jest`, `prettier`, `source-map-support`, `supertest`, `ts-jest`, `ts-loader`, `ts-node`, `tsc-alias`, `tsconfig-paths`, `typescript-eslint`.
+- **Apache-2.0:** `typescript`.
+
+### Dịch vụ runtime
+
+- **PostgreSQL 17:** PostgreSQL License ([điều khoản chính thức](https://www.postgresql.org/about/licence/)).
+- **ONLYOFFICE Docs Community 10.0.0:** AGPL v3 ([điều khoản chính thức](https://www.onlyoffice.com/legalterms)).
+
+## Khai báo sử dụng AI
+
+Dự án có sử dụng **OpenAI Codex với model GPT-6 Luna** để hỗ trợ phân tích yêu cầu, đề xuất cấu trúc, viết và chỉnh sửa mã nguồn/tài liệu, cũng như phân tích lỗi. Người thực hiện chịu trách nhiệm rà soát kết quả và quyết định nội dung bàn giao.
 
 ## Chạy backend bằng Docker Compose
 
