@@ -4,7 +4,7 @@
 // | 1   | Development và localhost   | Cho phép reset an toàn                 | NODE_ENV=development, DB_HOST=localhost; gọi assertLocalResetIsAllowed | Không ném lỗi                             |
 // | 2   | Database từ xa             | Ngăn xóa nhầm database dùng chung      | DB_HOST là hostname bên ngoài; gọi guard reset                         | Ném lỗi bảo vệ trước khi kết nối          |
 // | 3   | Ngoài development          | Chặn reset ở môi trường khác           | NODE_ENV=production, DB_HOST=localhost; gọi guard reset                | Ném lỗi bảo vệ                            |
-// | 4   | Truncate dữ liệu nghiệp vụ | Giữ nguyên schema và lịch sử migration | Gọi resetApplicationData với EntityManager giả                         | Chạy một TRUNCATE đúng sáu bảng nghiệp vụ |
+// | 4   | Truncate dữ liệu nghiệp vụ | Xóa cả workspace ẩn danh và dữ liệu mẫu | Gọi resetApplicationData với EntityManager giả                        | Chạy một TRUNCATE đúng bảy bảng nghiệp vụ |
 // | 5   | Manifest PPTX              | Chỉ seed bộ có đủ file nguồn và preview| Kiểm tra số mẫu, slide count và hai asset trên đĩa                     | 9 bộ hợp lệ, asset đều tồn tại             |
 
 import { access } from 'node:fs/promises';
@@ -61,7 +61,7 @@ describe('office-template-samples.seed', () => {
         );
     });
 
-    // Test 4 bảo đảm reset chỉ truncate bảng nghiệp vụ, không đụng lịch sử migration.
+    // Test 4 bảo đảm reset xóa cả workspace đã cấp mà vẫn giữ nguyên lịch sử migration.
     it('should truncate application tables and preserve migration history', async () => {
         // Bước 1 - Arrange: giả lập EntityManager để không kết nối PostgreSQL thật.
         const mockQuery = jest.fn().mockResolvedValue(undefined);
@@ -70,10 +70,10 @@ describe('office-template-samples.seed', () => {
         // Bước 2 - Act: yêu cầu helper xóa dữ liệu bảng nghiệp vụ.
         await resetApplicationData(manager);
 
-        // Bước 3 - Assert: một câu lệnh xóa đúng sáu bảng, không xóa bảng migration.
+        // Bước 3 - Assert: một câu lệnh xóa đúng bảy bảng, không xóa bảng migration.
         expect(mockQuery).toHaveBeenCalledTimes(1);
         expect(mockQuery).toHaveBeenCalledWith(
-            'TRUNCATE TABLE public."presentation_slide_previews", public."user_documents", public."office_template_versions", public."office_templates", public."template_categories", public."stored_files" RESTART IDENTITY CASCADE',
+            'TRUNCATE TABLE public."presentation_slide_previews", public."user_documents", public."anonymous_workspaces", public."office_template_versions", public."office_templates", public."template_categories", public."stored_files" RESTART IDENTITY CASCADE',
         );
     });
 

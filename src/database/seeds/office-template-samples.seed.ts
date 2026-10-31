@@ -288,6 +288,7 @@ const replacedCategorySlugs = [
 const applicationDataTables = [
     'public."presentation_slide_previews"',
     'public."user_documents"',
+    'public."anonymous_workspaces"',
     'public."office_template_versions"',
     'public."office_templates"',
     'public."template_categories"',
@@ -312,7 +313,8 @@ export function assertLocalResetIsAllowed(
     }
 }
 
-// Xóa các bảng nghiệp vụ trong transaction nhưng giữ schema và lịch sử migration.
+// Xóa cả workspace ẩn danh để trình duyệt test phải tạo workspace mới từ đầu.
+// Lệnh chạy trong transaction của seed, giữ nguyên schema và lịch sử migration.
 export async function resetApplicationData(
     manager: EntityManager,
 ): Promise<void> {
