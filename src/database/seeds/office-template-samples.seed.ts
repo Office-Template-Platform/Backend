@@ -1,5 +1,7 @@
-// Seed catalog DOCX/PPTX vào PostgreSQL; metadata và checksum được lấy từ asset trong assets/.
-// Mặc định đồng bộ mẫu mà không xóa dữ liệu người dùng; cờ --reset chỉ dành cho database local development.
+// Seed catalog DOCX/PPTX và metadata file từ assets; PostgreSQL chỉ lưu tham chiếu,
+// không nhúng nội dung nhị phân của các file mẫu.
+// Seed chỉ quản lý mẫu trong manifest này; mặc định đồng bộ an toàn.
+// Cờ --reset chỉ dành cho database local development.
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -38,6 +40,13 @@ interface TemplateSeed {
 // PPTX bổ sung số slide nguồn để catalog không suy ra số slide từ lượng ảnh preview.
 interface PresentationTemplateSeed extends TemplateSeed {
     slideCount: number;
+}
+
+// Tham chiếu một ảnh preview đã được render sẵn từ đúng slide của file PPTX.
+interface PresentationSlidePreviewSeed {
+    slideNumber: number;
+    title: string;
+    previewFileId: string;
 }
 
 const categories = [
@@ -461,35 +470,82 @@ async function ensureCurrentVersion(
     );
 }
 
-// Chỉ lưu preview slide có ảnh thật; seed không nhân bản thumbnail bìa cho các slide còn lại.
-async function ensureSlidePreview(
-    manager: EntityManager,
-    versionId: string,
-    previewFileId: string,
-): Promise<void> {
-    const repository = manager.getRepository(PresentationSlidePreview);
-    const existing = await repository.findOne({
-        where: { versionId, slideNumber: 1 },
-    });
+// Tạo object key ổn định cho ảnh slide theo thư mục chứa PPTX nguồn.
+// Lấy thư mục từ sourceKey để không khai báo lặp asset path trong manifest.
+// Dùng dấu `/` trên mọi OS; ensureStoredFile sẽ báo lỗi nếu asset bị thiếu.
+function getPresentationSlidePreviewObjectKey(
+    templateSeed: PresentationTemplateSeed,
+    slideNumber: number,
+): string {
+    const directoryEnd = templateSeed.sourceKey.lastIndexOf('/');
 
-    if (existing) {
-        await repository.save(
-            repository.merge(existing, {
-                previewFileId,
-                title: 'Bìa',
-            }),
+    if (directoryEnd < 0) {
+        throw new Error(
+            `PPTX sourceKey không có thư mục asset: ${templateSeed.sourceKey}`,
         );
-        return;
     }
 
-    await repository.save(
-        repository.create({
-            versionId,
-            slideNumber: 1,
-            previewFileId,
-            title: 'Bìa',
-        }),
+    const templateAssetDirectory = templateSeed.sourceKey.slice(
+        0,
+        directoryEnd,
     );
+    const slideFilename = `slide-${String(slideNumber).padStart(3, '0')}.png`;
+
+    return `${templateAssetDirectory}/slides/${slideFilename}`;
+}
+
+// Đồng bộ đủ ảnh preview theo số slide của version hiện tại.
+// Upsert theo (versionId, slideNumber) để seed chạy lại không tạo bản ghi trùng.
+// Xóa metadata preview không còn trong manifest; không xóa file hay hàng stored_files.
+async function ensureSlidePreviews(
+    manager: EntityManager,
+    versionId: string,
+    slidePreviews: PresentationSlidePreviewSeed[],
+): Promise<void> {
+    const repository = manager.getRepository(PresentationSlidePreview);
+    const existingPreviews = await repository.find({
+        where: { versionId },
+    });
+    const existingBySlideNumber = new Map(
+        existingPreviews.map((preview) => [preview.slideNumber, preview]),
+    );
+    const expectedSlideNumbers = new Set(
+        slidePreviews.map((preview) => preview.slideNumber),
+    );
+
+    for (const slidePreview of slidePreviews) {
+        const existing = existingBySlideNumber.get(slidePreview.slideNumber);
+
+        if (!existing) {
+            await repository.save(
+                repository.create({ versionId, ...slidePreview }),
+            );
+            continue;
+        }
+
+        if (
+            existing.previewFileId !== slidePreview.previewFileId ||
+            existing.title !== slidePreview.title
+        ) {
+            await repository.save(
+                repository.merge(existing, {
+                    previewFileId: slidePreview.previewFileId,
+                    title: slidePreview.title,
+                }),
+            );
+        }
+    }
+
+    const staleSlideNumbers = existingPreviews
+        .filter((preview) => !expectedSlideNumbers.has(preview.slideNumber))
+        .map((preview) => preview.slideNumber);
+
+    if (staleSlideNumbers.length > 0) {
+        await repository.delete({
+            versionId,
+            slideNumber: In(staleSlideNumbers),
+        });
+    }
 }
 
 // Xóa seed cũ khi chưa phát sinh tài liệu tham chiếu; nếu đã có lịch sử thì ẩn khỏi catalog.
@@ -777,8 +833,36 @@ async function seedOfficeTemplates(resetRequested: boolean): Promise<void> {
                     'Phiên bản trình chiếu ban đầu.',
                 );
 
-                // Preview bìa được dùng làm ảnh slide 1; không tạo ảnh giả cho các slide chưa có thumbnail.
-                await ensureSlidePreview(manager, version.id, previewFile.id);
+                const slidePreviews: PresentationSlidePreviewSeed[] = [];
+
+                // Mỗi slide cần ảnh render riêng. Thiếu asset làm ensureStoredFile ném lỗi,
+                // transaction rollback thay vì công bố một catalog thiếu preview.
+                for (
+                    let slideNumber = 1;
+                    slideNumber <= templateSeed.slideCount;
+                    slideNumber += 1
+                ) {
+                    const objectKey = getPresentationSlidePreviewObjectKey(
+                        templateSeed,
+                        slideNumber,
+                    );
+                    const slideFile = await ensureStoredFile(
+                        manager,
+                        objectKey,
+                        `${templateSeed.slug}-slide-${String(slideNumber).padStart(3, '0')}.png`,
+                        PNG_MIME_TYPE,
+                        'presentation-template-assets',
+                    );
+
+                    slidePreviews.push({
+                        slideNumber,
+                        title: `Slide ${slideNumber}`,
+                        previewFileId: slideFile.id,
+                    });
+                }
+
+                // Ghi đủ preview vào cùng transaction với version để API detail luôn khớp slideCount.
+                await ensureSlidePreviews(manager, version.id, slidePreviews);
             }
 
             // Seed thường dọn bản demo cũ; chế độ reset đã xóa sạch nên không cần bước này.

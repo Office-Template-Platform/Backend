@@ -194,7 +194,7 @@ Khi frontend và API có origin khác nhau, browser client cần gửi credentia
 | Thiết kế giọt nước                  |       14 | Thiết kế sáng tạo |
 | Thiết kế máy tính bảng              |        2 | Giáo dục          |
 
-Seed đồng bộ 9 bộ PPTX có đủ `file.pptx` và `preview.png`. Ảnh bìa được dùng làm thumbnail và preview slide đầu tiên; API chỉ liệt kê các slide đã có ảnh preview, còn `slideCount` là tổng số slide trong file PPTX.
+Seed đồng bộ 9 bộ PPTX có `file.pptx`, `preview.png` và ảnh riêng cho từng slide tại `slides/slide-NNN.png`. Ảnh `preview.png` dùng làm thumbnail catalog; seed tạo một bản ghi `presentation_slide_previews` cho mỗi ảnh, còn `slideCount` là tổng số slide trong file PPTX.
 
 Các mẫu cũ được xóa khỏi catalog và metadata file nếu chưa có tài liệu tham chiếu. Mẫu nào đã được dùng để tạo tài liệu sẽ chuyển sang trạng thái lưu trữ để giữ lịch sử nguồn.
 
