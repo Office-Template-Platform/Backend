@@ -1,4 +1,4 @@
-![Office Template Platform — thư viện mẫu văn bản và trình chiếu](https://raw.githubusercontent.com/Office-Template-Platform/Frontend/main/src/assets/images/office-template-platform-banner.png)
+![Office Template Platform — Thư viện mẫu văn bản và trình chiếu](https://raw.githubusercontent.com/Office-Template-Platform/Frontend/main/src/assets/images/office-template-platform-banner.png)
 
 <div align="center">
 
